@@ -1,0 +1,7 @@
+............................................................             [100%]
+============================= slowest 5 durations =============================
+1.00s setup    tests/test_api.py::test_health_is_public_and_reports_readiness
+0.33s call     tests/test_api.py::test_stream_lifecycle_and_metrics
+0.31s call     tests/test_latency.py::test_single_transaction_latency_is_within_target
+0.04s call     tests/test_api.py::test_dataset_info_reports_the_source
+0.02s call     tests/test_latency.py::test_every_prediction_returns_a_probability

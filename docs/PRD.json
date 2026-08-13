@@ -1,0 +1,903 @@
+{
+  "project": {
+    "name": "Real-Time Pseudo-Streaming Credit Card Fraud Detection",
+    "short_name": "FraudStream AI",
+    "category": "Anomaly Detection / Machine Learning / Real-Time Fraud Detection",
+    "version": "1.0.0",
+    "status": "Development",
+    "objective": "Build a real-time pseudo-streaming fraud detection system that processes incoming credit card transactions one by one using Python generators, predicts fraud risk with low latency, flags high-risk transactions and accounts, and provides a live monitoring dashboard.",
+    "primary_requirement": {
+      "training": "Train an anomaly/fraud detection model using historical credit card transaction data.",
+      "streaming": "Use Python generators to stream test transactions one at a time.",
+      "prediction": "Perform real-time fraud prediction for every streamed transaction.",
+      "latency": "Target end-to-end model inference latency below 50 milliseconds per transaction.",
+      "risk_detection": "Assign a fraud probability/risk score and classify transactions into risk levels.",
+      "account_monitoring": "Aggregate suspicious activity and flag high-risk accounts.",
+      "dashboard": "Provide a live React dashboard showing transaction flow, fraud alerts, risk scores, metrics and account risk."
+    }
+  },
+
+  "technology_stack": {
+    "frontend": {
+      "framework": "React 16",
+      "language": "JavaScript or TypeScript",
+      "ui": "Tailwind CSS",
+      "charts": "Recharts",
+      "state_management": "React Context API or Redux",
+      "routing": "React Router",
+      "http_client": "Axios",
+      "realtime": "Supabase Realtime",
+      "build_tool": "Create React App or compatible React 16 build setup"
+    },
+
+    "ml_engine": {
+      "language": "Python 3.10+",
+      "data_processing": [
+        "Pandas",
+        "NumPy"
+      ],
+      "machine_learning": [
+        "Scikit-learn",
+        "XGBoost"
+      ],
+      "anomaly_detection": [
+        "Isolation Forest",
+        "Local Outlier Factor",
+        "One-Class SVM"
+      ],
+      "model_serialization": [
+        "Joblib"
+      ],
+      "streaming": "Python generators",
+      "api": "FastAPI",
+      "server": "Uvicorn"
+    },
+
+    "backend": {
+      "platform": "Supabase",
+      "database": "PostgreSQL",
+      "authentication": "Supabase Auth",
+      "realtime": "Supabase Realtime",
+      "storage": "Supabase Storage",
+      "security": "Row Level Security",
+      "optional_serverless": "Supabase Edge Functions"
+    },
+
+    "deployment": {
+      "frontend": [
+        "Vercel",
+        "Netlify"
+      ],
+      "python_api": [
+        "Render",
+        "Railway",
+        "Hugging Face Spaces"
+      ],
+      "database": "Supabase",
+      "source_control": "GitHub",
+      "ci_cd": "GitHub Actions"
+    }
+  },
+
+  "system_architecture": {
+    "flow": [
+      "Historical Transaction Dataset",
+      "Data Cleaning",
+      "Feature Engineering",
+      "Class Imbalance Handling",
+      "Model Training",
+      "Model Evaluation",
+      "Threshold Tuning",
+      "Model Serialization",
+      "FastAPI ML Detection Engine",
+      "Python Generator",
+      "Pseudo-Streaming Transaction",
+      "Feature Transformation",
+      "Real-Time Prediction",
+      "Risk Score Calculation",
+      "Fraud Decision",
+      "Supabase PostgreSQL",
+      "Supabase Realtime",
+      "React Dashboard"
+    ],
+
+    "architecture": {
+      "frontend": "React 16 dashboard",
+      "database": "Supabase PostgreSQL",
+      "authentication": "Supabase Auth",
+      "ml_service": "Python FastAPI service",
+      "stream_processor": "Python generator-based pseudo-streaming engine",
+      "realtime_layer": "Supabase Realtime",
+      "model": "Trained anomaly/fraud detection model",
+      "deployment": "Vercel + Render/Railway + Supabase"
+    }
+  },
+
+  "functional_requirements": {
+    "FR-001": {
+      "name": "Dataset Upload",
+      "description": "Allow administrators/developers to load historical transaction datasets.",
+      "priority": "High"
+    },
+
+    "FR-002": {
+      "name": "Data Preprocessing",
+      "description": "Clean missing values, remove invalid records, normalize numerical features and encode categorical data where required.",
+      "priority": "High"
+    },
+
+    "FR-003": {
+      "name": "Feature Engineering",
+      "description": "Generate transaction-level and account-level fraud indicators.",
+      "priority": "High",
+      "features": [
+        "Transaction amount",
+        "Transaction time",
+        "Transaction frequency",
+        "Account transaction frequency",
+        "Average transaction amount",
+        "Amount deviation",
+        "Time since previous transaction",
+        "Location deviation",
+        "Merchant category",
+        "Transaction velocity",
+        "Historical fraud rate"
+      ]
+    },
+
+    "FR-004": {
+      "name": "Class Imbalance Handling",
+      "description": "Handle the extremely low proportion of fraudulent transactions.",
+      "methods": [
+        "Class weighting",
+        "Random undersampling",
+        "SMOTE where appropriate",
+        "Threshold tuning",
+        "Precision-Recall analysis"
+      ]
+    },
+
+    "FR-005": {
+      "name": "Model Training",
+      "description": "Train and compare multiple fraud/anomaly detection models.",
+      "candidate_models": [
+        "Logistic Regression",
+        "Random Forest",
+        "XGBoost",
+        "Isolation Forest"
+      ]
+    },
+
+    "FR-006": {
+      "name": "Model Selection",
+      "description": "Select the model based on fraud detection effectiveness and inference latency rather than accuracy alone.",
+      "primary_metrics": [
+        "Precision",
+        "Recall",
+        "F1 Score",
+        "PR-AUC",
+        "ROC-AUC",
+        "False Positive Rate",
+        "Inference Latency"
+      ]
+    },
+
+    "FR-007": {
+      "name": "Threshold Tuning",
+      "description": "Tune the classification threshold to prioritize fraud recall while controlling false positives.",
+      "risk_thresholds": {
+        "low": "0.00 - 0.39",
+        "medium": "0.40 - 0.69",
+        "high": "0.70 - 0.89",
+        "critical": "0.90 - 1.00"
+      }
+    },
+
+    "FR-008": {
+      "name": "Pseudo Streaming",
+      "description": "Stream test transactions sequentially using a Python generator rather than processing the entire test dataset as one batch.",
+      "required_pattern": "Python generator"
+    },
+
+    "FR-009": {
+      "name": "Real-Time Prediction",
+      "description": "Predict fraud risk for every incoming transaction immediately.",
+      "target_latency_ms": 50
+    },
+
+    "FR-010": {
+      "name": "Fraud Alert",
+      "description": "Generate an alert when a transaction exceeds the configured fraud risk threshold."
+    },
+
+    "FR-011": {
+      "name": "High-Risk Account Detection",
+      "description": "Aggregate suspicious transactions and calculate account-level risk."
+    },
+
+    "FR-012": {
+      "name": "Transaction Storage",
+      "description": "Store streamed transaction details, predictions, risk scores and decisions in Supabase PostgreSQL."
+    },
+
+    "FR-013": {
+      "name": "Live Dashboard",
+      "description": "Display transaction events and fraud alerts in near real time."
+    },
+
+    "FR-014": {
+      "name": "Authentication",
+      "description": "Protect dashboard access using Supabase Authentication."
+    }
+  },
+
+  "machine_learning_pipeline": {
+    "step_1_data": {
+      "source": "Public credit card fraud dataset or approved synthetic dataset",
+      "input": "Historical transactions",
+      "output": "Training and testing datasets"
+    },
+
+    "step_2_preprocessing": [
+      "Remove duplicate records",
+      "Handle missing values",
+      "Validate numerical ranges",
+      "Normalize/standardize required numerical features",
+      "Encode categorical variables",
+      "Separate target labels",
+      "Prevent data leakage"
+    ],
+
+    "step_3_split": {
+      "method": "Train/Validation/Test",
+      "recommendation": "Prefer time-aware splitting when timestamps are available.",
+      "reason": "Avoid future information leaking into historical training data."
+    },
+
+    "step_4_imbalance": {
+      "problem": "Fraud transactions represent a very small fraction of all transactions.",
+      "solution": [
+        "Use class weights",
+        "Evaluate with Precision-Recall metrics",
+        "Use controlled resampling only on training data",
+        "Tune fraud threshold"
+      ]
+    },
+
+    "step_5_training": {
+      "models": [
+        "Logistic Regression baseline",
+        "Random Forest",
+        "XGBoost",
+        "Isolation Forest"
+      ],
+      "selection_strategy": "Compare fraud recall, precision, PR-AUC, F1 and inference latency."
+    },
+
+    "step_6_threshold": {
+      "goal": "Choose a practical fraud threshold instead of blindly using 0.5.",
+      "example": {
+        "threshold": 0.75,
+        "interpretation": "Transactions with predicted fraud probability >= 0.75 are flagged as high risk."
+      }
+    },
+
+    "step_7_serialization": {
+      "model_file": "fraud_model.joblib",
+      "preprocessor_file": "preprocessor.joblib",
+      "metadata_file": "model_metadata.json"
+    }
+  },
+
+  "pseudo_streaming": {
+    "core_requirement": "Python generator",
+    "concept": "The test dataset must be converted into an event-like transaction stream where one transaction is processed at a time.",
+    "generator_responsibilities": [
+      "Read transaction records sequentially",
+      "Yield one transaction at a time",
+      "Attach transaction identifier",
+      "Preserve event timestamp",
+      "Send transaction to prediction pipeline"
+    ],
+    "processing_loop": [
+      "Receive transaction",
+      "Validate schema",
+      "Transform features",
+      "Run model inference",
+      "Calculate fraud probability",
+      "Calculate risk level",
+      "Update account risk",
+      "Persist result",
+      "Emit realtime event",
+      "Continue to next transaction"
+    ]
+  },
+
+  "risk_engine": {
+    "transaction_risk": {
+      "low": {
+        "score": "0.00-0.39",
+        "action": "Allow"
+      },
+      "medium": {
+        "score": "0.40-0.69",
+        "action": "Monitor"
+      },
+      "high": {
+        "score": "0.70-0.89",
+        "action": "Flag"
+      },
+      "critical": {
+        "score": "0.90-1.00",
+        "action": "Alert and investigate"
+      }
+    },
+
+    "account_risk": {
+      "signals": [
+        "Number of suspicious transactions",
+        "Fraud probability average",
+        "High-value transaction count",
+        "Transaction velocity",
+        "Geographical anomaly",
+        "Repeated merchant anomaly",
+        "Recent suspicious activity"
+      ],
+      "risk_score": "Weighted combination of transaction-level and behavioral signals."
+    }
+  },
+
+  "supabase_database": {
+    "tables": {
+      "profiles": {
+        "purpose": "Application users",
+        "columns": [
+          "id",
+          "email",
+          "role",
+          "created_at"
+        ]
+      },
+
+      "transactions": {
+        "purpose": "Incoming and processed transactions",
+        "columns": [
+          "id",
+          "account_id",
+          "transaction_amount",
+          "merchant",
+          "merchant_category",
+          "transaction_time",
+          "location",
+          "model_score",
+          "risk_level",
+          "is_fraud",
+          "processing_latency_ms",
+          "created_at"
+        ]
+      },
+
+      "fraud_alerts": {
+        "purpose": "High-risk transaction alerts",
+        "columns": [
+          "id",
+          "transaction_id",
+          "account_id",
+          "risk_score",
+          "risk_level",
+          "alert_type",
+          "status",
+          "created_at"
+        ]
+      },
+
+      "account_risk": {
+        "purpose": "Account-level risk monitoring",
+        "columns": [
+          "account_id",
+          "transaction_count",
+          "suspicious_count",
+          "average_risk_score",
+          "maximum_risk_score",
+          "risk_level",
+          "last_activity",
+          "updated_at"
+        ]
+      },
+
+      "model_metrics": {
+        "purpose": "Store trained model evaluation metrics",
+        "columns": [
+          "id",
+          "model_name",
+          "version",
+          "precision",
+          "recall",
+          "f1_score",
+          "pr_auc",
+          "roc_auc",
+          "average_latency_ms",
+          "created_at"
+        ]
+      }
+    },
+
+    "security": {
+      "row_level_security": true,
+      "rules": [
+        "Authenticated users can access dashboard data.",
+        "Only authorized roles can modify model configuration.",
+        "Sensitive transaction information must not be exposed unnecessarily.",
+        "Service-role keys must never be placed in React frontend code."
+      ]
+    }
+  },
+
+  "api_requirements": {
+    "base_url": "/api",
+
+    "endpoints": {
+      "health": {
+        "method": "GET",
+        "path": "/health",
+        "purpose": "Check ML service availability"
+      },
+
+      "predict": {
+        "method": "POST",
+        "path": "/predict",
+        "purpose": "Predict risk for one transaction"
+      },
+
+      "stream_start": {
+        "method": "POST",
+        "path": "/stream/start",
+        "purpose": "Start pseudo-streaming test transactions"
+      },
+
+      "stream_stop": {
+        "method": "POST",
+        "path": "/stream/stop",
+        "purpose": "Stop active pseudo-stream"
+      },
+
+      "stream_status": {
+        "method": "GET",
+        "path": "/stream/status",
+        "purpose": "Return current streaming state"
+      },
+
+      "metrics": {
+        "method": "GET",
+        "path": "/metrics",
+        "purpose": "Return model and streaming metrics"
+      },
+
+      "alerts": {
+        "method": "GET",
+        "path": "/alerts",
+        "purpose": "Return recent fraud alerts"
+      },
+
+      "account_risk": {
+        "method": "GET",
+        "path": "/accounts/high-risk",
+        "purpose": "Return high-risk accounts"
+      }
+    }
+  },
+
+  "frontend": {
+    "application": "FraudStream AI Dashboard",
+    "pages": [
+      {
+        "name": "Login",
+        "features": [
+          "Supabase authentication",
+          "Email/password login",
+          "Session management"
+        ]
+      },
+      {
+        "name": "Dashboard",
+        "features": [
+          "Total transactions",
+          "Fraud detected",
+          "Fraud rate",
+          "High-risk accounts",
+          "Average inference latency",
+          "Streaming status"
+        ]
+      },
+      {
+        "name": "Live Transaction Monitor",
+        "features": [
+          "Live transaction feed",
+          "Risk score",
+          "Risk level",
+          "Fraud status",
+          "Processing latency",
+          "Transaction timestamp"
+        ]
+      },
+      {
+        "name": "Fraud Alerts",
+        "features": [
+          "Critical alerts",
+          "High-risk transactions",
+          "Account identifier",
+          "Fraud probability",
+          "Alert status"
+        ]
+      },
+      {
+        "name": "High-Risk Accounts",
+        "features": [
+          "Account risk score",
+          "Suspicious transaction count",
+          "Last suspicious activity",
+          "Risk level"
+        ]
+      },
+      {
+        "name": "Model Analytics",
+        "features": [
+          "Precision",
+          "Recall",
+          "F1",
+          "PR-AUC",
+          "ROC-AUC",
+          "Inference latency",
+          "Confusion matrix"
+        ]
+      }
+    ]
+  },
+
+  "dashboard_widgets": [
+    "Total Transactions",
+    "Fraud Transactions",
+    "Fraud Detection Rate",
+    "High Risk Accounts",
+    "Critical Alerts",
+    "Average Prediction Latency",
+    "Transactions Per Second",
+    "Live Transaction Stream",
+    "Fraud Risk Distribution",
+    "Recent Fraud Alerts",
+    "Top High-Risk Accounts"
+  ],
+
+  "performance_requirements": {
+    "PR-001": {
+      "name": "Prediction Latency",
+      "target": "< 50 ms per transaction",
+      "measurement": "Measure model inference and processing latency."
+    },
+    "PR-002": {
+      "name": "Streaming",
+      "target": "One transaction processed at a time",
+      "measurement": "Generator-based processing."
+    },
+    "PR-003": {
+      "name": "Dashboard Updates",
+      "target": "Near real-time",
+      "measurement": "Supabase Realtime events."
+    },
+    "PR-004": {
+      "name": "Reliability",
+      "target": "Gracefully handle invalid transaction records and prediction failures."
+    },
+    "PR-005": {
+      "name": "Scalability",
+      "target": "Architecture should allow replacement of pseudo-streaming with Kafka/Redis Streams later."
+    }
+  },
+
+  "project_structure": {
+    "root": "fraudstream-ai/",
+    "directories": {
+      "frontend": {
+        "description": "React 16 dashboard",
+        "folders": [
+          "src/components",
+          "src/pages",
+          "src/hooks",
+          "src/services",
+          "src/context",
+          "src/utils",
+          "src/assets"
+        ]
+      },
+      "ml_engine": {
+        "description": "Python ML and pseudo-streaming engine",
+        "folders": [
+          "data",
+          "models",
+          "notebooks",
+          "src/preprocessing",
+          "src/features",
+          "src/training",
+          "src/inference",
+          "src/streaming",
+          "src/risk",
+          "src/api",
+          "tests"
+        ]
+      },
+      "supabase": {
+        "description": "Database and Supabase configuration",
+        "folders": [
+          "migrations",
+          "seed",
+          "functions"
+        ]
+      },
+      "docs": {
+        "files": [
+          "PRD.json",
+          "architecture.md",
+          "api.md",
+          "model-card.md",
+          "deployment.md"
+        ]
+      }
+    }
+  },
+
+  "development_phases": {
+    "phase_1": {
+      "name": "Project Setup",
+      "tasks": [
+        "Create GitHub repository",
+        "Create React 16 frontend",
+        "Create Python virtual environment",
+        "Create FastAPI service",
+        "Create Supabase project",
+        "Configure environment variables"
+      ]
+    },
+
+    "phase_2": {
+      "name": "Dataset and EDA",
+      "tasks": [
+        "Select dataset",
+        "Analyze class distribution",
+        "Analyze missing values",
+        "Analyze transaction distributions",
+        "Identify important features",
+        "Document fraud imbalance"
+      ]
+    },
+
+    "phase_3": {
+      "name": "ML Pipeline",
+      "tasks": [
+        "Preprocess data",
+        "Engineer features",
+        "Train baseline",
+        "Train anomaly/fraud models",
+        "Compare models",
+        "Tune hyperparameters",
+        "Tune threshold",
+        "Evaluate latency"
+      ]
+    },
+
+    "phase_4": {
+      "name": "Pseudo Streaming Engine",
+      "tasks": [
+        "Implement Python generator",
+        "Create transaction event schema",
+        "Process transactions sequentially",
+        "Add prediction pipeline",
+        "Calculate risk scores",
+        "Implement account-level aggregation",
+        "Measure latency"
+      ]
+    },
+
+    "phase_5": {
+      "name": "Supabase Integration",
+      "tasks": [
+        "Create database schema",
+        "Configure RLS",
+        "Connect FastAPI to Supabase",
+        "Store transactions",
+        "Store fraud alerts",
+        "Store account risk",
+        "Enable Realtime"
+      ]
+    },
+
+    "phase_6": {
+      "name": "React Dashboard",
+      "tasks": [
+        "Build authentication",
+        "Build dashboard",
+        "Build live transaction feed",
+        "Build fraud alert panel",
+        "Build high-risk account panel",
+        "Build model analytics",
+        "Connect Supabase Realtime"
+      ]
+    },
+
+    "phase_7": {
+      "name": "Testing",
+      "tasks": [
+        "Unit tests",
+        "API tests",
+        "Model tests",
+        "Generator tests",
+        "Latency tests",
+        "Database tests",
+        "Frontend tests",
+        "End-to-end tests"
+      ]
+    },
+
+    "phase_8": {
+      "name": "Deployment",
+      "tasks": [
+        "Push project to GitHub",
+        "Deploy Python API",
+        "Deploy React frontend",
+        "Configure Supabase production database",
+        "Configure production environment variables",
+        "Enable CORS",
+        "Run production smoke tests"
+      ]
+    }
+  },
+
+  "testing_strategy": {
+    "model_tests": [
+      "Check class imbalance",
+      "Check data leakage",
+      "Evaluate fraud recall",
+      "Evaluate precision",
+      "Evaluate PR-AUC",
+      "Evaluate threshold performance"
+    ],
+    "streaming_tests": [
+      "Verify generator yields one transaction",
+      "Verify no batch prediction occurs",
+      "Verify every transaction receives a prediction",
+      "Verify stream can stop safely"
+    ],
+    "performance_tests": [
+      "Measure average latency",
+      "Measure P95 latency",
+      "Measure P99 latency",
+      "Verify target under 50 ms where environment permits"
+    ],
+    "integration_tests": [
+      "Python API to Supabase",
+      "React to API",
+      "React to Supabase Realtime",
+      "Authentication",
+      "Alert creation"
+    ]
+  },
+
+  "deployment": {
+    "recommended_architecture": {
+      "frontend": "Vercel",
+      "python_ml_api": "Render or Railway",
+      "database": "Supabase",
+      "authentication": "Supabase Auth",
+      "source_code": "GitHub"
+    },
+    "environment_variables": {
+      "frontend": [
+        "REACT_APP_SUPABASE_URL",
+        "REACT_APP_SUPABASE_ANON_KEY",
+        "REACT_APP_API_URL"
+      ],
+      "backend": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "MODEL_PATH"
+      ],
+      "security_rule": "Never expose SUPABASE_SERVICE_ROLE_KEY in the React application."
+    }
+  },
+
+  "hackathon_demo_flow": [
+    "Login to FraudStream AI",
+    "Open live monitoring dashboard",
+    "Start pseudo-stream",
+    "Show transaction arriving one by one",
+    "Show model prediction for each transaction",
+    "Show risk score",
+    "Show processing latency",
+    "Show a suspicious transaction being flagged",
+    "Show fraud alert appearing in real time",
+    "Show account becoming high risk after repeated suspicious activity",
+    "Open model analytics",
+    "Show precision, recall, F1, PR-AUC and latency",
+    "Explain Python generator implementation",
+    "Explain class imbalance and threshold tuning",
+    "Show deployed application"
+  ],
+
+  "key_differentiators": [
+    "Generator-based pseudo-streaming instead of simple batch prediction",
+    "Real-time fraud risk scoring",
+    "Explicit sub-50ms latency target",
+    "Class imbalance-aware model evaluation",
+    "Threshold tuning based on fraud detection objectives",
+    "Transaction-level and account-level risk detection",
+    "Supabase Realtime dashboard",
+    "Production-style architecture",
+    "Model performance monitoring",
+    "Clear path to Kafka/Redis production streaming"
+  ],
+
+  "minimum_viable_product": [
+    "Historical dataset",
+    "Preprocessing pipeline",
+    "Trained fraud detection model",
+    "Threshold tuning",
+    "Python generator",
+    "FastAPI prediction endpoint",
+    "Supabase PostgreSQL",
+    "React 16 dashboard",
+    "Live transaction feed",
+    "Fraud alerts",
+    "High-risk account detection",
+    "Latency measurement",
+    "Deployment"
+  ],
+
+  "final_deliverables": [
+    "GitHub repository",
+    "React 16 frontend",
+    "Python ML engine",
+    "FastAPI backend service",
+    "Supabase database",
+    "Trained ML model",
+    "Pseudo-streaming generator",
+    "Fraud detection dashboard",
+    "API documentation",
+    "Database schema",
+    "Model evaluation report",
+    "Deployment documentation",
+    "Live deployed application",
+    "Hackathon presentation/demo"
+  ],
+
+  "success_criteria": {
+    "SC-001": "System successfully trains a fraud/anomaly detection model.",
+    "SC-002": "Test transactions are processed sequentially through a Python generator.",
+    "SC-003": "Every transaction receives a fraud risk score.",
+    "SC-004": "High-risk transactions generate alerts.",
+    "SC-005": "Repeated suspicious activity can identify high-risk accounts.",
+    "SC-006": "Model is evaluated using imbalance-appropriate metrics.",
+    "SC-007": "Prediction latency is measured and targeted below 50ms.",
+    "SC-008": "React dashboard receives transaction/alert updates in near real time.",
+    "SC-009": "Data is securely stored in Supabase.",
+    "SC-010": "Complete application is deployed and demonstrable."
+  },
+
+  "recommended_build_order": [
+    "1. Dataset and exploratory data analysis",
+    "2. Data preprocessing and feature engineering",
+    "3. Baseline fraud model",
+    "4. Advanced model comparison",
+    "5. Threshold tuning",
+    "6. Model serialization",
+    "7. Python generator pseudo-streaming",
+    "8. FastAPI inference service",
+    "9. Supabase database and authentication",
+    "10. Transaction and alert persistence",
+    "11. React 16 dashboard",
+    "12. Supabase Realtime integration",
+    "13. Account risk engine",
+    "14. Performance and latency optimization",
+    "15. Testing",
+    "16. Deployment",
+    "17. Hackathon demo preparation"
+  ]
+}

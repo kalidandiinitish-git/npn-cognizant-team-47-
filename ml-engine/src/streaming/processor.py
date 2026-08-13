@@ -1,0 +1,489 @@
+"""The pseudo-stream processing loop (PRD pseudo_streaming.processing_loop).
+
+One transaction at a time:
+    receive -> validate -> transform -> infer -> risk score -> risk level ->
+    account risk -> persist -> emit realtime event -> next
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
+
+from ..config import DATA_DIR, UPLOAD_DIR, settings
+from ..inference.predictor import FraudPredictor, ModelNotTrainedError, get_predictor
+from ..investigations import InvestigationStore
+from ..persistence.supabase_client import SupabaseWriter, get_writer
+from ..risk.scoring import (
+    AccountRiskEngine,
+    alert_type_for,
+    assess,
+    behaviour_reason_codes,
+)
+from .generator import TransactionEvent, count_transactions, transaction_stream
+from .state import StreamConfig, StreamState, StreamStatus
+
+logger = logging.getLogger(__name__)
+
+
+class StreamProcessor:
+    """Owns the stream lifecycle, the risk state and the persistence handoff."""
+
+    def __init__(
+        self,
+        predictor: Optional[FraudPredictor] = None,
+        writer: Optional[SupabaseWriter] = None,
+    ) -> None:
+        self.state = StreamState()
+        self.accounts = AccountRiskEngine()
+        self.investigations = InvestigationStore()
+        self._predictor = predictor
+        self._writer = writer
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+        self._source_rows = 0
+
+    # -- dependencies --------------------------------------------------------
+
+    @property
+    def predictor(self) -> FraudPredictor:
+        if self._predictor is None:
+            self._predictor = get_predictor()
+        return self._predictor
+
+    @property
+    def writer(self) -> SupabaseWriter:
+        if self._writer is None:
+            self._writer = get_writer()
+        return self._writer
+
+    # -- lifecycle -----------------------------------------------------------
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def resolve_source(self, source: Optional[str] = None) -> Path:
+        """Pick the stream source, preferring the held-out test split.
+
+        A relative name is looked up in ``data/`` and then ``data/uploads/``, so a
+        file added through the upload endpoint can be streamed by name. Absolute
+        paths are accepted for programmatic use; requests arriving over HTTP are
+        restricted to bare file names by the API schema.
+        """
+        if source:
+            candidate = Path(source)
+            if candidate.is_absolute():
+                if candidate.exists():
+                    return candidate
+                raise FileNotFoundError(f"Stream source not found: {candidate}")
+
+            for base in (DATA_DIR, UPLOAD_DIR):
+                resolved = base / candidate
+                if resolved.exists():
+                    return resolved
+            raise FileNotFoundError(
+                f"Stream source '{source}' was not found in {DATA_DIR.name}/ or "
+                f"{DATA_DIR.name}/{UPLOAD_DIR.name}/."
+            )
+
+        if settings.stream_data_path.exists():
+            return settings.stream_data_path
+
+        dataset = settings.resolve_dataset_path()
+        if dataset is not None:
+            logger.warning(
+                "Held-out stream file %s is missing; falling back to the full dataset %s. "
+                "Run training to generate the test split.",
+                settings.stream_data_path,
+                dataset,
+            )
+            return dataset
+        raise FileNotFoundError(
+            "No stream source available. Run training to create data/stream_test.csv "
+            "or set DATA_PATH to the dataset."
+        )
+
+    def start(
+        self,
+        source: Optional[str] = None,
+        limit: Optional[int] = None,
+        delay_ms: Optional[int] = None,
+        skip: int = 0,
+        persist: bool = True,
+        reset: bool = True,
+    ) -> Dict[str, Any]:
+        """Start streaming on a background thread."""
+        with self._lock:
+            if self.is_running:
+                return {
+                    "started": False,
+                    "reason": "A stream is already running.",
+                    **self.status(),
+                }
+
+            resolved = self.resolve_source(source)
+            # Fail fast with a clear message if the model was never trained.
+            self.predictor
+
+            capped_limit = min(
+                limit or settings.stream_max_transactions,
+                settings.stream_max_transactions,
+            )
+            config = StreamConfig(
+                source=str(resolved),
+                limit=capped_limit,
+                delay_ms=settings.stream_delay_ms if delay_ms is None else max(int(delay_ms), 0),
+                skip=max(int(skip), 0),
+                persist=bool(persist),
+            )
+
+            if reset:
+                self.state.reset_counters()
+                self.accounts.reset()
+                # Cases belong to the run that raised their alerts. Without this
+                # the workbench would list investigations whose alerts have just
+                # been cleared from the live buffer.
+                self.investigations.reset()
+
+            self._stop_event.clear()
+            self.state.begin(config)
+            self._thread = threading.Thread(
+                target=self._run, args=(config,), name="pseudo-stream", daemon=True
+            )
+            self._thread.start()
+
+        return {"started": True, **self.status()}
+
+    def stop(self, timeout: float = 5.0) -> Dict[str, Any]:
+        """Request a clean stop and wait briefly for the loop to finish."""
+        self._stop_event.set()
+        self.state.request_stop()
+        thread = self._thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+        if self.state.status == StreamStatus.STOPPING:
+            self.state.finish(StreamStatus.IDLE)
+        return {"stopped": True, **self.status()}
+
+    def status(self) -> Dict[str, Any]:
+        snapshot = self.state.status_snapshot()
+        snapshot["is_running"] = self.is_running
+        snapshot["source_total_rows"] = self._source_rows
+        return snapshot
+
+    # -- the loop ------------------------------------------------------------
+
+    def _run(self, config: StreamConfig) -> None:
+        self._source_rows = count_transactions(Path(config.source))
+        logger.info(
+            "Pseudo-stream starting: source=%s rows=%s limit=%s delay=%sms",
+            config.source,
+            self._source_rows,
+            config.limit,
+            config.delay_ms,
+        )
+        try:
+            stream = transaction_stream(
+                Path(config.source),
+                limit=config.limit,
+                delay_ms=config.delay_ms,
+                skip=config.skip,
+                should_continue=lambda: not self._stop_event.is_set(),
+                on_invalid=lambda _row, _reason: self.state.record_invalid(),
+            )
+            for event in stream:
+                self.process_event(event, persist=config.persist)
+
+            if self._stop_event.is_set():
+                self.state.finish(StreamStatus.IDLE)
+                logger.info("Pseudo-stream stopped after %s transactions", self.state.processed)
+            else:
+                self.state.finish(StreamStatus.COMPLETED)
+                logger.info("Pseudo-stream completed: %s transactions", self.state.processed)
+        except ModelNotTrainedError as error:
+            self.state.finish(StreamStatus.ERROR, str(error))
+            logger.error("Pseudo-stream aborted: %s", error)
+        except Exception as error:  # pragma: no cover - defensive
+            self.state.finish(StreamStatus.ERROR, str(error))
+            logger.exception("Pseudo-stream failed: %s", error)
+        finally:
+            if self.writer.enabled:
+                self.writer.flush(timeout=5.0)
+                stats = self.writer.stats()
+                self.state.record_persistence(0, 0)
+                logger.info("Supabase writer stats: %s", stats)
+
+    # -- single transaction pipeline -----------------------------------------
+
+    def process_event(
+        self,
+        event: TransactionEvent,
+        persist: bool = True,
+        create_investigation: bool = True,
+    ) -> Dict[str, Any]:
+        """Score one transaction and fold it into all downstream state."""
+        loop_started = time.perf_counter()
+
+        prediction = self.predictor.predict(event.model_record())
+        assessment = assess(prediction.probability, prediction.threshold)
+
+        identity = event.identity
+        account_id = str(identity.get("account_id", "UNKNOWN"))
+
+        features = self.accounts.behavioural_features(
+            account_id=account_id,
+            amount=event.amount,
+            event_time=event.event_time,
+        )
+        profile = self.accounts.update(
+            account_id=account_id,
+            amount=event.amount,
+            event_time=event.event_time,
+            risk_score=assessment.risk_score,
+            suspicious=assessment.alert_required,
+            location=str(identity.get("location", "")),
+            merchant_category=str(identity.get("merchant_category", "")),
+            observed_at=event.transaction_time,
+        )
+
+        processing_latency_ms = (time.perf_counter() - loop_started) * 1000.0
+
+        row = self._build_transaction_row(
+            event=event,
+            assessment=assessment,
+            prediction_latency_ms=prediction.inference_latency_ms,
+            processing_latency_ms=processing_latency_ms,
+            features=features,
+            profile_risk_level=profile.risk_level,
+        )
+
+        alert = None
+        investigation = None
+        if assessment.alert_required:
+            alert = self._build_alert_row(event, assessment, features, account_id)
+            if create_investigation:
+                explain = getattr(self.predictor, "explain", None)
+                if callable(explain):
+                    explanation = explain(
+                        event.model_record(), model_probability=prediction.probability
+                    )
+                else:
+                    explanation = {
+                        "available": False,
+                        "method": None,
+                        "reason": "The active estimator does not provide model contributions.",
+                        "features": [],
+                        "model_name": prediction.model_name,
+                        "model_version": prediction.model_version,
+                    }
+                reasons = behaviour_reason_codes(assessment, features)
+                investigation = self.investigations.create_from_alert(
+                    alert=alert,
+                    transaction=row,
+                    explanation=explanation,
+                    reason_codes=reasons,
+                )
+                alert["case_id"] = investigation["case_id"]
+                alert["explanation_available"] = bool(explanation.get("available"))
+
+        self.state.record_transaction(
+            row=row,
+            latency_ms=prediction.inference_latency_ms,
+            risk_level=assessment.risk_level,
+            flagged=assessment.alert_required,
+            label=event.label,
+            alert=alert,
+        )
+
+        if persist and self.writer.enabled:
+            self.writer.write_transaction(self._persistable_transaction(row))
+            if alert is not None:
+                self.writer.write_alert(self._persistable_alert(alert))
+            if investigation is not None:
+                self.writer.write_investigation_case(
+                    self.investigations.persistable(investigation)
+                )
+            # Only sync accounts that carry risk, to keep write volume sane.
+            if profile.risk_level != "low" or profile.suspicious_count:
+                self.writer.write_account_risk(
+                    {
+                        **profile.as_dict(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+
+        return row
+
+    def _build_transaction_row(
+        self,
+        event: TransactionEvent,
+        assessment,
+        prediction_latency_ms: float,
+        processing_latency_ms: float,
+        features,
+        profile_risk_level: str,
+    ) -> Dict[str, Any]:
+        identity = event.identity
+        return {
+            "transaction_ref": event.transaction_id,
+            "sequence": event.sequence,
+            "account_id": identity.get("account_id"),
+            "card_last4": identity.get("card_last4"),
+            "transaction_amount": round(event.amount, 2),
+            "merchant": identity.get("merchant"),
+            "merchant_category": identity.get("merchant_category"),
+            "location": identity.get("location"),
+            "channel": identity.get("channel"),
+            "transaction_time": event.transaction_time,
+            "model_score": assessment.probability,
+            "risk_score": assessment.risk_score,
+            "risk_level": assessment.risk_level,
+            "decision": assessment.action,
+            "is_fraud": assessment.alert_required,
+            "inference_latency_ms": round(prediction_latency_ms, 3),
+            "processing_latency_ms": round(processing_latency_ms, 3),
+            "actual_label": event.label,
+            "account_risk_level": profile_risk_level,
+            "behaviour": features.as_dict(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _build_alert_row(
+        self, event: TransactionEvent, assessment, features, account_id: str
+    ) -> Dict[str, Any]:
+        return {
+            "id": str(uuid4()),
+            "transaction_id": event.transaction_id,
+            "account_id": account_id,
+            "risk_score": assessment.risk_score,
+            "risk_level": assessment.risk_level,
+            "alert_type": alert_type_for(assessment, features),
+            "status": "open",
+            "merchant": event.identity.get("merchant"),
+            "transaction_amount": round(event.amount, 2),
+            "location": event.identity.get("location"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @staticmethod
+    def _persistable_transaction(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop UI-only fields that have no column in Supabase."""
+        payload = {key: value for key, value in row.items() if key != "behaviour"}
+        payload["behaviour"] = row.get("behaviour")  # stored as jsonb
+        return payload
+
+    @staticmethod
+    def _persistable_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(alert)
+        payload.pop("explanation_available", None)
+        return payload
+
+    # -- reads for the API ---------------------------------------------------
+
+    def recent_transactions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        return self.state.recent_transactions(limit)
+
+    def recent_alerts(self, limit: int = 50, level: Optional[str] = None) -> List[Dict[str, Any]]:
+        alerts = self.state.recent_alerts(limit if level is None else max(limit * 4, limit))
+        if level:
+            alerts = [alert for alert in alerts if alert.get("risk_level") == level]
+        return alerts[:limit]
+
+    def update_alert_status(
+        self, transaction_id: str, status: str, actor: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        updated = self.state.update_alert_status(
+            transaction_id=transaction_id, status=status
+        )
+        if updated is None:
+            return None
+        case = self.investigations.set_status_for_transaction(
+            transaction_id, status, actor
+        )
+        if self.writer.enabled:
+            self.writer.update_alert_status(transaction_id, status)
+            if case is not None:
+                self.writer.write_investigation_case(
+                    self.investigations.persistable(case)
+                )
+        return updated
+
+    def persist_investigation(
+        self, case: Dict[str, Any], note: Optional[Dict[str, Any]] = None
+    ) -> None:
+        if not self.writer.enabled:
+            return
+        self.writer.write_investigation_case(self.investigations.persistable(case))
+        if note is not None:
+            self.writer.write_investigation_note(
+                self.investigations.persistable_note(note)
+            )
+
+    def high_risk_accounts(self, minimum_level: str = "high", limit: int = 50) -> List[Dict[str, Any]]:
+        return [
+            {**profile.as_dict(), "signals": self.accounts.signal_breakdown(profile.account_id)}
+            for profile in self.accounts.high_risk_accounts(minimum_level, limit)
+        ]
+
+    def metrics(self) -> Dict[str, Any]:
+        """Everything the dashboard widgets need in a single response."""
+        latency = self.state.latency_stats()
+        distribution = self.state.risk_distribution()
+        flagged = sum(
+            entry["count"] for entry in distribution if entry["level"] in {"high", "critical"}
+        )
+        critical = next(
+            (entry["count"] for entry in distribution if entry["level"] == "critical"), 0
+        )
+        processed = self.state.processed
+        account_levels = self.accounts.count_by_level()
+
+        model_info: Dict[str, Any]
+        try:
+            model_info = self.predictor.info()
+        except ModelNotTrainedError as error:
+            model_info = {"error": str(error)}
+
+        return {
+            "stream": self.status(),
+            "totals": {
+                "total_transactions": processed,
+                "fraud_transactions": flagged,
+                "fraud_detection_rate": round(100.0 * flagged / processed, 3) if processed else 0.0,
+                "critical_alerts": critical,
+                "alerts_raised": self.state.alerts_raised,
+                "invalid_records": self.state.invalid_records,
+                "high_risk_accounts": account_levels.get("high", 0)
+                + account_levels.get("critical", 0),
+                "monitored_accounts": len(self.accounts.all_profiles()),
+                "transactions_per_second": self.state.throughput(),
+            },
+            "latency": latency,
+            "risk_distribution": distribution,
+            "account_risk_levels": account_levels,
+            "live_quality": self.state.live_quality(),
+            "timeline": self.state.timeline(),
+            "model": model_info,
+            "persistence": self.writer.stats(),
+            "investigations": self.investigations.metrics(),
+        }
+
+
+_processor: Optional[StreamProcessor] = None
+_processor_lock = threading.Lock()
+
+
+def get_processor() -> StreamProcessor:
+    global _processor
+    if _processor is None:
+        with _processor_lock:
+            if _processor is None:
+                _processor = StreamProcessor()
+    return _processor

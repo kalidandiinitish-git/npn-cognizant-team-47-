@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FraudStream AI — Project Audit & Verification Report</title>
+<style>
+  :root{--ink:#0b1324;--muted:#526079;--line:#d9dee8;--soft:#f5f7fa;--navy:#0b1526;--orange:#ef5226;--green:#07835c;--amber:#a76400;--red:#bd1e3c;--blue:#2e5aac}
+  *{box-sizing:border-box} html{font-size:10.2pt} body{margin:0;color:var(--ink);font-family:"Segoe UI",Arial,sans-serif;line-height:1.42;background:#fff}
+  @page{size:A4;margin:15mm 14mm 17mm} @page:first{margin:0}
+  h1,h2,h3,h4{margin:0;color:var(--ink);line-height:1.16;break-after:avoid} h1{font-size:31pt;letter-spacing:-1.2px} h2{font-size:20pt;letter-spacing:-.35px;margin-bottom:5mm} h3{font-size:13.5pt;margin:5mm 0 2mm} h4{font-size:10.5pt;margin:3mm 0 1mm}
+  p{margin:0 0 2.5mm} ul,ol{margin:1.5mm 0 3mm;padding-left:5mm} li{margin:0 0 1.1mm} strong{font-weight:700} code{font:8.5pt Consolas,monospace;background:#eef1f6;padding:.3mm 1mm;border-radius:1mm;overflow-wrap:anywhere}
+  table{width:100%;border-collapse:collapse;margin:2.5mm 0 4mm;font-size:8.25pt;break-inside:auto} thead{display:table-header-group} tr{break-inside:avoid} th{background:var(--navy);color:#fff;text-align:left;font-size:7.4pt;text-transform:uppercase;letter-spacing:.35px;padding:2.2mm 2mm} td{border-bottom:.25mm solid var(--line);padding:2mm;vertical-align:top} tbody tr:nth-child(even){background:#f8f9fb}
+  .cover{height:297mm;background:linear-gradient(145deg,#07111f 0%,#0e1d32 70%,#17304c 100%);color:#fff;padding:22mm 20mm 17mm;position:relative;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;overflow:hidden}
+  .cover:after{content:"";position:absolute;width:180mm;height:180mm;border:1px solid rgba(239,82,38,.38);border-radius:50%;right:-75mm;top:-55mm;box-shadow:0 0 0 18mm rgba(239,82,38,.04),0 0 0 38mm rgba(239,82,38,.025)}
+  .brand{display:flex;align-items:center;gap:3mm;font-weight:700;font-size:14pt}.mark{width:9mm;height:9mm;border:1.2mm solid var(--orange);border-radius:2mm;display:grid;place-items:center;color:var(--orange);font-size:12pt}
+  .eyebrow{font-size:8pt;letter-spacing:1.8px;text-transform:uppercase;font-weight:700;color:#ff8968}.cover h1{color:#fff;font-size:38pt;max-width:155mm;margin:5mm 0 6mm}.cover .lead{font-size:15pt;color:#c7d1df;max-width:155mm}.cover-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2.2mm;margin-top:14mm}.cover-stat{border-top:.7mm solid var(--orange);padding-top:3mm}.cover-stat b{font-size:18pt;display:block}.cover-stat span{font-size:8pt;color:#aeb9c9}.cover-meta{display:flex;justify-content:space-between;align-items:end;font-size:8.4pt;color:#aeb9c9}.cover-meta b{color:#fff}
+  .section{page-break-before:always}.no-break{page-break-before:auto}.section-head{border-left:1.4mm solid var(--orange);padding-left:4mm;margin-bottom:6mm}.section-head .kicker{font-size:7.4pt;color:var(--orange);text-transform:uppercase;letter-spacing:1.3px;font-weight:700}.section-head h2{margin:.8mm 0}.section-head p{color:var(--muted);max-width:170mm}
+  .callout{border:1px solid var(--line);border-left:1.3mm solid var(--blue);padding:3.5mm 4mm;margin:3mm 0 5mm;background:#f8faff;break-inside:avoid}.callout.warn{border-left-color:var(--amber);background:#fffaf0}.callout.danger{border-left-color:var(--red);background:#fff6f7}.callout.good{border-left-color:var(--green);background:#f3fbf8}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4mm}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:2.5mm}.card{border:1px solid var(--line);border-radius:2mm;padding:3.5mm;background:#fff;break-inside:avoid}.card h3{margin:0 0 1.5mm;font-size:11pt}.card p:last-child{margin-bottom:0}.metric{border-top:.9mm solid var(--orange);padding-top:2.5mm}.metric b{display:block;font-size:19pt;letter-spacing:-.5px}.metric span{font-size:7.6pt;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .status{display:inline-block;border-radius:9mm;padding:.5mm 2mm;font-size:7.1pt;font-weight:700;white-space:nowrap}.implemented{background:#dcf6ec;color:#056644}.partial{background:#fff0cf;color:#855000}.external{background:#e7edff;color:#294d9b}.missing{background:#fde3e8;color:#a31834}.pass{background:#dcf6ec;color:#056644}.scope{background:#eef1f6;color:#465269}
+  .flow{display:grid;grid-template-columns:repeat(6,1fr);gap:2mm;margin:4mm 0}.flow div{border:1px solid var(--line);padding:3mm 2mm;text-align:center;font-size:7.5pt;font-weight:600;background:var(--soft);position:relative}.flow div:not(:last-child):after{content:"›";position:absolute;right:-1.5mm;top:50%;transform:translateY(-50%);font-size:14pt;color:var(--orange);z-index:2}
+  .bar{height:3mm;background:#e4e8ef;border-radius:2mm;overflow:hidden;margin-top:1mm}.bar i{display:block;height:100%;background:var(--orange)}
+  .screenshot{border:1px solid var(--line);border-radius:2mm;overflow:hidden;margin:4mm 0;break-inside:avoid}.screenshot img{display:block;width:100%;height:auto}.caption{font-size:7.5pt;color:var(--muted);padding:2mm 3mm;background:var(--soft)}
+  .image-grid{display:grid;grid-template-columns:1fr 1fr;gap:3mm}.image-grid .screenshot{margin:0}.image-grid img{aspect-ratio:1.48/1;object-fit:cover;object-position:top}
+  .mono{font-family:Consolas,monospace;font-size:8pt}.small{font-size:8pt;color:var(--muted)}.tight td,.tight th{padding:1.55mm 1.7mm}.avoid{break-inside:avoid}.muted{color:var(--muted)}
+  .toc{columns:2;column-gap:12mm}.toc div{display:flex;justify-content:space-between;border-bottom:1px dotted #abb3c1;padding:2mm 0;break-inside:avoid}.toc b{color:var(--orange);margin-right:2mm}
+  .risk-row{display:grid;grid-template-columns:23mm 30mm 1fr;gap:2mm;align-items:center;padding:2mm 0;border-bottom:1px solid var(--line)}.dot{width:3mm;height:3mm;border-radius:50%;display:inline-block;margin-right:2mm}.low{background:#13ad79}.medium{background:#e59a13}.high{background:#ef5226}.critical{background:#db1747}
+  .footnote{font-size:7.3pt;color:var(--muted);border-top:1px solid var(--line);padding-top:2mm;margin-top:5mm}.recommend{display:grid;grid-template-columns:10mm 1fr;gap:3mm;border-bottom:1px solid var(--line);padding:3mm 0;break-inside:avoid}.recommend .n{width:8mm;height:8mm;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:700}.recommend h3{margin:0 0 1mm;font-size:11pt}
+</style>
+</head>
+<body>
+<section class="cover">
+  <div>
+    <div class="brand"><span class="mark">◇</span>FraudStream.</div>
+    <div style="margin-top:37mm" class="eyebrow">Independent codebase audit · version 1.0.0</div>
+    <h1>Project Audit &amp;<br>Verification Report</h1>
+    <p class="lead">A complete review of the product requirements, machine-learning pipeline, pseudo-streaming engine, API, React dashboard, Supabase security model, testing evidence, and deployment readiness.</p>
+    <div class="cover-grid">
+      <div class="cover-stat"><b>121</b><span>owned files audited</span></div>
+      <div class="cover-stat"><b>60</b><span>pytest cases passed</span></div>
+      <div class="cover-stat"><b>30/30</b><span>HTTP checks passed</span></div>
+      <div class="cover-stat"><b>32/32</b><span>browser checks passed</span></div>
+    </div>
+  </div>
+  <div class="cover-meta">
+    <div><b>Prepared for</b><br>FraudStream AI project team</div>
+    <div><b>Audit date</b><br>13 August 2026</div>
+    <div style="text-align:right"><b>Classification</b><br>Engineering review · local evidence</div>
+  </div>
+</section>
+
+<section class="section no-break">
+  <div class="section-head"><div class="kicker">Document guide</div><h2>Contents &amp; audit basis</h2><p>This report separates code-complete behavior from behavior that requires a live third-party service or production deployment.</p></div>
+  <div class="toc">
+    <div><span><b>01</b>Executive assessment</span><span>3</span></div><div><span><b>02</b>Scope and repository inventory</span><span>4</span></div>
+    <div><span><b>03</b>System architecture</span><span>6</span></div><div><span><b>04</b>Dataset and ML pipeline</span><span>8</span></div>
+    <div><span><b>05</b>Streaming, risk and API</span><span>11</span></div><div><span><b>06</b>Frontend experience</span><span>14</span></div>
+    <div><span><b>07</b>Supabase and security</span><span>17</span></div><div><span><b>08</b>Testing and verification</span><span>19</span></div>
+    <div><span><b>09</b>PRD traceability</span><span>21</span></div><div><span><b>10</b>Deployment readiness</span><span>26</span></div>
+    <div><span><b>11</b>Risks and recommendations</span><span>28</span></div><div><span><b>12</b>Conclusion</span><span>31</span></div>
+  </div>
+  <h3>Evidence model</h3>
+  <table class="tight"><thead><tr><th>Status</th><th>Meaning in this report</th></tr></thead><tbody>
+    <tr><td><span class="status implemented">Implemented</span></td><td>Concrete source implementation and local evidence exist.</td></tr>
+    <tr><td><span class="status partial">Partial</span></td><td>Material parts exist, but at least one requirement or operational property is incomplete.</td></tr>
+    <tr><td><span class="status external">Unverified externally</span></td><td>Integration code/configuration exists, but the required live Supabase, GitHub, or deployment behavior was not demonstrable without user accounts and credentials.</td></tr>
+    <tr><td><span class="status missing">Not implemented</span></td><td>No substantive implementation or delivery evidence was found.</td></tr>
+  </tbody></table>
+  <div class="callout warn"><strong>Important boundary.</strong> Local demo mode, in-memory polling, migration SQL, and Realtime subscription code prove design and local behavior; they do not prove that RLS, Auth, Realtime, persistence, or hosting work in a provisioned production environment.</div>
+  <p class="footnote">Report inputs: every project-owned source, config, documentation, test, migration, seed, manifest, metadata, and operational tool file. Generated/vendor/binary/large-data artifacts were excluded from text review but their presence and metadata were recorded.</p>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">01 · Executive assessment</div><h2>Strong local system; production boundary remains</h2><p>FraudStream AI is a credible, measured fraud-detection demo with a genuine one-event-at-a-time stream, a trained imbalance-aware model, a coherent risk engine, and a comprehensive analyst console.</p></div>
+  <div class="grid4">
+    <div class="card metric"><span>Weighted PRD compliance</span><b>65.5%</b><p class="small">No credit for externally unverified claims</p></div>
+    <div class="card metric"><span>Test PR-AUC</span><b>0.7629</b><p class="small">XGBoost on untouched chronological test split</p></div>
+    <div class="card metric"><span>p95 inference</span><b>1.59 ms</b><p class="small">50 ms target; 31× headroom</p></div>
+    <div class="card metric"><span>Clean transactions</span><b>283,726</b><p class="small">473 frauds · 0.1667%</p></div>
+  </div>
+  <div class="grid2" style="margin-top:5mm">
+    <div><h3>What is convincingly complete</h3><ul>
+      <li>Chronological 70/15/15 training, validation, and test split with serialized preprocessing parity.</li>
+      <li>Four candidate models, imbalance handling, precision-recall threshold tuning, and latency-gated selection.</li>
+      <li>Lazy <code>csv.DictReader</code> generator; one record transformed and predicted per iteration.</li>
+      <li>Transaction bands, alerts, seven-signal account aggregation, and bounded live state.</li>
+      <li>FastAPI contract, React 16 console, protected routing, polling fallback, and Realtime subscriptions.</li>
+      <li>Comprehensive local unit/API, HTTP smoke, production build, and browser-flow evidence.</li>
+    </ul></div>
+    <div><h3>What prevents a production-ready rating</h3><ul>
+      <li>Backend authentication can fail open when Supabase configuration is absent.</li>
+      <li>No API role authorization; all authenticated users can trigger privileged operations.</li>
+      <li>Dashboard API state is process memory and is not rehydrated from Postgres after restart.</li>
+      <li>Persistence has no retry/dead-letter path and replay identifiers are not run/source scoped.</li>
+      <li>Supabase RLS/Auth/Realtime and deployed hosting remain externally unverified.</li>
+      <li>No reproducible artifact provisioning or checked-in Vercel/Render deployment manifests.</li>
+    </ul></div>
+  </div>
+  <div class="callout good"><strong>Overall verdict:</strong> ready for a local hackathon demonstration and engineering review. Not yet ready for handling real payment data or unattended production traffic. The most valuable next step is not another UI feature; it is closing authorization, durability, and deployment-verification gaps.</div>
+  <h3>Conservative compliance score</h3>
+  <table class="tight"><thead><tr><th>Category</th><th>Implemented</th><th>Partial</th><th>External</th><th>Not built</th><th>Weighted</th></tr></thead><tbody>
+    <tr><td>Functional requirements (14)</td><td>8</td><td>4</td><td>2</td><td>0</td><td><strong>71.4%</strong></td></tr>
+    <tr><td>Performance requirements (5)</td><td>1</td><td>3</td><td>1</td><td>0</td><td><strong>50.0%</strong></td></tr>
+    <tr><td>Success criteria (10)</td><td>5</td><td>2</td><td>2</td><td>1</td><td><strong>60.0%</strong></td></tr>
+    <tr><td>Constraint groups (15)</td><td>6</td><td>7</td><td>1</td><td>1</td><td><strong>63.3%</strong></td></tr>
+    <tr><td>Final deliverables (14)</td><td>10</td><td>0</td><td>2</td><td>2</td><td><strong>71.4%</strong></td></tr>
+    <tr><td><strong>Total (58)</strong></td><td><strong>30</strong></td><td><strong>16</strong></td><td><strong>8</strong></td><td><strong>4</strong></td><td><strong>65.5%</strong></td></tr>
+  </tbody></table>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">02 · Scope &amp; inventory</div><h2>Every project-owned file reviewed</h2><p>The audit covered 121 owned files. Exclusions were limited to dependencies, generated builds/logs, large CSV content, caches, and binary model artifacts.</p></div>
+  <div class="grid3">
+    <div class="card metric"><span>Frontend</span><b>45</b><p>React source, configuration, manifests and lockfile.</p></div>
+    <div class="card metric"><span>ML engine/backend</span><b>45</b><p>Python source, tests, metadata, config and scripts.</p></div>
+    <div class="card metric"><span>Operations &amp; remaining</span><b>31</b><p>19 tools, 5 docs, 4 Supabase, 3 root/governance.</p></div>
+  </div>
+  <h3>Owned-file inventory</h3>
+  <table><thead><tr><th>Area</th><th>Count</th><th>Reviewed content</th></tr></thead><tbody>
+    <tr><td>Root &amp; governance</td><td>3</td><td><code>.gitignore</code>, root README, GitHub Actions CI.</td></tr>
+    <tr><td>Documentation</td><td>5</td><td>PRD, architecture, API, model card, deployment guide.</td></tr>
+    <tr><td>Frontend</td><td>45</td><td>10 manifests/config files; entry and CSS; 9 pages; shared, app, and landing components; auth/stream contexts; API client; routing/hooks/utilities; favicon and asset notes.</td></tr>
+    <tr><td>ML engine &amp; backend</td><td>45</td><td>27 source modules across API, preprocessing, features, training, inference, streaming, risk and persistence; 7 test files; smoke script; metadata; manifests/config/readmes/placeholders.</td></tr>
+    <tr><td>Supabase</td><td>4</td><td>Initial migration, seed SQL, setup README, functions placeholder README.</td></tr>
+    <tr><td>Operational tooling</td><td>19</td><td>PowerShell and Node helpers for installation, training, indexing, builds, servers, screenshots, smoke tests, UI flows, 404 checks, and aggregate verification.</td></tr>
+  </tbody></table>
+  <h3>Excluded from word-for-word reading</h3>
+  <table class="tight"><thead><tr><th>Excluded artifact</th><th>Reason</th><th>Evidence retained</th></tr></thead><tbody>
+    <tr><td><code>frontend/node_modules</code>, <code>ml-engine/.venv</code></td><td>Third-party/vendor code</td><td>Pinned manifests, lockfile, installed runtime use and successful validations.</td></tr>
+    <tr><td><code>frontend/dist</code>, caches</td><td>Generated build output</td><td>Production build log: 991 modules, successful in 3.39 s.</td></tr>
+    <tr><td><code>logs/</code>, screenshots</td><td>Generated verification artifacts</td><td>Validation logs and selected screenshots inspected as evidence.</td></tr>
+    <tr><td><code>*.joblib</code></td><td>Binary trusted artifacts</td><td>Presence plus full <code>model_metadata.json</code>; successful runtime loading.</td></tr>
+    <tr><td><code>creditcard.csv</code>, <code>stream_test.csv</code></td><td>Large data, ~150 MB raw input</td><td>Schema, cleaning report, profile, split/index metadata, row counts and end-to-end streaming evidence.</td></tr>
+  </tbody></table>
+  <div class="callout"><strong>Method:</strong> source behavior was treated as authoritative; prose documentation was cross-checked rather than assumed correct. Findings identify places where documentation overstates durability or where CI comments no longer match the committed lockfile.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">03 · Architecture</div><h2>Three tiers, two live-delivery paths</h2><p>React 16 consumes a FastAPI detection engine through authenticated HTTP polling and, when configured, consumes database changes directly through Supabase Realtime.</p></div>
+  <div class="flow"><div>Historical CSV</div><div>Train &amp; serialize</div><div>Python generator</div><div>Predict &amp; assess</div><div>Persist &amp; publish</div><div>React console</div></div>
+  <div class="grid2">
+    <div class="card"><h3>Offline path</h3><p><code>training/train.py</code> loads, cleans, chronologically splits, engineers features, fits preprocessing, trains candidates, tunes thresholds, benchmarks one-record serving, evaluates the selected model, and writes the model, preprocessor, metadata, profile, held-out stream, and fraud index.</p></div>
+    <div class="card"><h3>Runtime path</h3><p><code>StreamProcessor</code> owns one background stream thread. It asks the lazy generator for one valid event, invokes the process-wide predictor, maps probability to risk, updates account state, records bounded in-memory metrics, and enqueues optional database writes.</p></div>
+    <div class="card"><h3>Browser path</h3><p><code>StreamContext</code> loads reference data, polls four dashboard endpoints every 2 seconds while active and 8 seconds while idle, and merges Realtime transaction, alert, and account updates when Supabase is present.</p></div>
+    <div class="card"><h3>Thread model</h3><p>Uvicorn serves requests; one <code>pseudo-stream</code> thread processes transactions; one <code>supabase-writer</code> thread batches network writes. Inference is isolated from network latency, but the design requires one process/worker.</p></div>
+  </div>
+  <h3>Key architectural decisions</h3>
+  <table><thead><tr><th>Decision</th><th>Reason</th><th>Consequence</th></tr></thead><tbody>
+    <tr><td>Chronological split</td><td>Prevents future transactions entering historical training.</td><td>Better leakage control; test fraud count is only 52.</td></tr>
+    <tr><td>Generator + scalar inference</td><td>Meets FR-008 and supports per-event latency and clean stop.</td><td>Lower throughput than vectorized batch scoring by design.</td></tr>
+    <tr><td>Asynchronous persistence</td><td>Supabase network time must not consume the 50 ms inference budget.</td><td>Queue/failure semantics require production hardening.</td></tr>
+    <tr><td>In-memory live state</td><td>Fast local dashboard and no mandatory external service.</td><td>History and account behavior are lost on restart.</td></tr>
+    <tr><td>Polling plus Realtime</td><td>Local fallback without Supabase; push updates when provisioned.</td><td>Two merge paths can temporarily produce shape differences.</td></tr>
+    <tr><td>Synthetic display identity</td><td>ULB data has no account, merchant or location fields.</td><td>Account risk demonstrates mechanism, not production identity accuracy.</td></tr>
+  </tbody></table>
+  <div class="callout warn"><strong>Scale limit:</strong> singleton model, stream, metrics and account state are process-local. Multiple Uvicorn workers or horizontal replicas would create independent streams and conflicting dashboard truth. A durable consumer/state boundary is required before scaling.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">04 · Dataset &amp; ML pipeline</div><h2>Imbalance-aware evaluation with leakage controls</h2><p>The ULB credit-card dataset is cleaned, sorted by elapsed time, and split without shuffling. Performance is reported with precision-recall metrics rather than misleading accuracy.</p></div>
+  <div class="grid4">
+    <div class="card metric"><span>Raw rows</span><b>284,807</b></div><div class="card metric"><span>Duplicates removed</span><b>1,081</b></div><div class="card metric"><span>Fraud rows</span><b>473</b></div><div class="card metric"><span>Imbalance</span><b>1:599</b></div>
+  </div>
+  <h3>Chronological partition</h3>
+  <table class="tight"><thead><tr><th>Split</th><th>Rows</th><th>Frauds</th><th>Time range</th><th>Use</th></tr></thead><tbody>
+    <tr><td>Train · 70%</td><td>198,608</td><td>366</td><td>0–132,906 s</td><td>Fit preprocessing and candidate estimators.</td></tr>
+    <tr><td>Validation · 15%</td><td>42,558</td><td>55</td><td>132,906–151,320 s</td><td>Tune thresholds and compare model quality.</td></tr>
+    <tr><td>Test · 15%</td><td>42,560</td><td>52</td><td>151,320–172,792 s</td><td>Final evaluation and pseudo-stream replay.</td></tr>
+  </tbody></table>
+  <div class="bar"><i style="width:70%"></i></div><p class="small">Train 70% · Validation 15% · Test 15%; sorted by <code>Time</code>, never shuffled.</p>
+  <div class="grid2">
+    <div><h3>Model inputs</h3><ul><li>Published PCA components <code>V1…V28</code>.</li><li><code>amount</code> and <code>log_amount</code>.</li><li><code>seconds_of_day</code>, <code>hour_of_day</code>, <code>is_night</code>.</li><li>Median imputation and standard scaling fitted only on train.</li></ul></div>
+    <div><h3>Deliberately excluded</h3><ul><li>Account ID and card suffix.</li><li>Merchant and category.</li><li>Location and channel.</li><li>Ground-truth <code>Class</code>.</li></ul><p class="small">These are synthetic display/aggregation attributes and are excluded to prevent leakage. Metadata reports an empty offending-column list.</p></div>
+  </div>
+  <h3>Candidate comparison on validation split</h3>
+  <table class="tight"><thead><tr><th>Candidate</th><th>PR-AUC</th><th>ROC-AUC</th><th>Precision</th><th>Recall</th><th>p95</th><th>Fit</th></tr></thead><tbody>
+    <tr><td>Random forest</td><td><strong>0.8715</strong></td><td>0.9783</td><td>0.9375</td><td>0.8182</td><td>33.16 ms</td><td>44.05 s</td></tr>
+    <tr><td><strong>XGBoost · selected</strong></td><td>0.8472</td><td><strong>0.9880</strong></td><td>0.8824</td><td>0.8182</td><td><strong>1.76 ms</strong></td><td>4.85 s</td></tr>
+    <tr><td>Logistic regression</td><td>0.8414</td><td>0.9817</td><td>0.8431</td><td>0.7818</td><td>2.23 ms</td><td>1.09 s</td></tr>
+    <tr><td>Isolation forest</td><td>0.0553</td><td>0.9541</td><td>0.0812</td><td>0.5273</td><td>6.13 ms</td><td>1.97 s</td></tr>
+  </tbody></table>
+  <div class="callout"><strong>Selection rationale.</strong> A hard 50 ms p95 gate and preferred 25 ms comfort gate are applied before maximizing PR-AUC. Random forest had the highest PR-AUC but consumed too much of the latency budget; XGBoost retained comparable detection quality with roughly 19× lower p95 latency.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">04 · Model results</div><h2>Measured XGBoost performance</h2><p>The selected threshold is 0.184152, tuned on validation to maximize F2 subject to precision of at least 0.50.</p></div>
+  <div class="grid4">
+    <div class="card metric"><span>Test precision</span><b>0.750</b></div><div class="card metric"><span>Test recall</span><b>0.750</b></div><div class="card metric"><span>Test F1</span><b>0.750</b></div><div class="card metric"><span>Test ROC-AUC</span><b>0.9737</b></div>
+  </div>
+  <div class="grid2" style="margin-top:5mm">
+    <div><h3>Test confusion matrix</h3><table class="tight"><thead><tr><th></th><th>Predicted fraud</th><th>Predicted legitimate</th></tr></thead><tbody><tr><td><strong>Actually fraud</strong></td><td>39 · TP</td><td>13 · FN</td></tr><tr><td><strong>Actually legitimate</strong></td><td>13 · FP</td><td>42,495 · TN</td></tr></tbody></table><p>39 of 52 frauds were detected, with 13 false alarms among 42,508 legitimate transactions. False-positive rate: 0.000306.</p></div>
+    <div><h3>Single-transaction serving latency</h3><table class="tight"><tbody><tr><td>Average</td><td><strong>0.9739 ms</strong></td></tr><tr><td>Median</td><td>0.9185 ms</td></tr><tr><td>p95</td><td><strong>1.588 ms</strong></td></tr><tr><td>p99</td><td>1.932 ms</td></tr><tr><td>Maximum</td><td>2.2913 ms</td></tr><tr><td>Target</td><td>&lt; 50 ms · pass</td></tr></tbody></table></div>
+  </div>
+  <h3>Probability-to-risk mapping</h3>
+  <p>Because an imbalance-weighted raw probability does not align naturally to the PRD’s fixed bands, a monotonic piecewise mapping sends raw probability 0 to risk 0, the tuned threshold to risk 0.70, and probability 1 to risk 1. This guarantees a model-positive event lands in high or critical risk.</p>
+  <div class="risk-row"><div><span class="dot low"></span><strong>Low</strong></div><div>0.00–0.39</div><div>Allow</div></div>
+  <div class="risk-row"><div><span class="dot medium"></span><strong>Medium</strong></div><div>0.40–0.69</div><div>Monitor</div></div>
+  <div class="risk-row"><div><span class="dot high"></span><strong>High</strong></div><div>0.70–0.89</div><div>Flag</div></div>
+  <div class="risk-row"><div><span class="dot critical"></span><strong>Critical</strong></div><div>0.90–1.00</div><div>Alert and investigate</div></div>
+  <div class="callout warn"><strong>Measurement caveat.</strong> Reported latency covers feature construction, serialized preprocessing, and model inference for one record. It deliberately excludes HTTP, account aggregation, Supabase persistence, Realtime delivery, and browser rendering; therefore PR-001 is rated partial rather than claiming true payment-to-dashboard end-to-end latency.</div>
+  <h3>Model limitations</h3><ul><li>Only two days of September 2013 European transactions; fraud behavior and economics have changed.</li><li>52 test frauds create wide uncertainty; one additional catch changes recall by about two percentage points.</li><li>PCA features limit business explainability, and no drift/calibration monitoring is implemented.</li><li>Threshold must be re-tuned on the real target population; critical means investigate, not auto-block.</li></ul>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">05 · Streaming, risk &amp; API</div><h2>A real event loop, not batch prediction</h2><p>The generator reads and validates one CSV row at a time. The processor makes exactly one prediction per valid event and supports stop, skip, delay, limits, and invalid-row continuation.</p></div>
+  <div class="flow"><div>Yield event</div><div>Validate schema</div><div>Transform</div><div>Infer</div><div>Risk &amp; account</div><div>Record / persist</div></div>
+  <div class="grid2">
+    <div class="card"><h3>Generator guarantees</h3><ul><li><code>csv.DictReader</code>, no DataFrame batch load.</li><li>Required Time, Amount and V1–V28 conversion.</li><li>Stable sequence/ref, synthetic timestamp and deterministic identity.</li><li>Stop callback checked before each event.</li><li>Malformed records counted and skipped.</li><li>Ground truth used only for live quality, never inference.</li></ul></div>
+    <div class="card"><h3>Account risk signals</h3><ul><li>Average risk · 30%</li><li>Suspicious ratio · 20%</li><li>Maximum risk · 15%</li><li>Velocity · 10%</li><li>High-value ratio · 10%</li><li>Geography anomaly · 8%</li><li>Merchant anomaly · 7%</li></ul></div>
+  </div>
+  <h3>Implemented API surface</h3>
+  <table class="tight"><thead><tr><th>Group</th><th>Endpoints</th><th>Behavior</th></tr></thead><tbody>
+    <tr><td>System</td><td><code>GET /api/health</code></td><td>Public readiness, model/data/Supabase/auth state and uptime.</td></tr>
+    <tr><td>Detection</td><td><code>POST /api/predict</code></td><td>One transaction; missing PCA fields default to zero with completeness reported.</td></tr>
+    <tr><td>Stream</td><td><code>POST /stream/start</code>, <code>/stop</code>, <code>GET /status</code></td><td>Single concurrent stream; 409 on duplicate start; validated bare CSV source names.</td></tr>
+    <tr><td>Dashboard</td><td><code>/metrics</code>, <code>/transactions/recent</code>, <code>/alerts</code>, <code>/accounts</code></td><td>Bounded process-memory views plus alert status triage.</td></tr>
+    <tr><td>Reference</td><td><code>GET /model</code>, <code>/dataset/info</code></td><td>Evaluation metadata, live quality, profile, artifact and fraud-index information.</td></tr>
+    <tr><td>Upload</td><td><code>POST /dataset/upload</code></td><td>Chunked 250 MB maximum; constrained filename/extension; stored under uploads.</td></tr>
+  </tbody></table>
+  <h3>Reliability and security controls</h3><ul><li>HTTP stream source rejects directories, <code>..</code>, absolute paths and non-CSV names.</li><li>Uploads are basename-stripped, character-restricted, chunked, and size-limited.</li><li>Unknown Pydantic request fields are forbidden; delay, limits, levels and statuses are bounded.</li><li>Persistence queue is bounded and runs outside the inference path.</li><li>Recent transactions/alerts, latency samples and timeline buckets are bounded in memory.</li></ul>
+  <div class="callout danger"><strong>Durability defects:</strong> transaction refs are row-number based and not namespaced by source/run; replay can violate uniqueness. Writer failures are logged and removed without retry or dead-letter handling. Stream persistence counters are not connected to actual writer results. API history and account state are not loaded from Supabase after restart.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">06 · Frontend experience</div><h2>A complete analyst console with local fallback</h2><p>The React 16 application has a measured public landing page, Supabase authentication wiring, a protected lazy-loaded console, responsive navigation, and six core operational views plus dataset controls.</p></div>
+  <div class="screenshot"><img src="../logs/screens/landing-top.png" alt="FraudStream landing page"><div class="caption">Public landing page: product positioning, measured 50 ms objective, and a clearly presented one-event-at-a-time model.</div></div>
+  <h3>Page coverage</h3>
+  <table class="tight"><thead><tr><th>View</th><th>Primary capabilities</th></tr></thead><tbody>
+    <tr><td>Login</td><td>Email sign-in/sign-up, password reset, session restoration, return URL, local demo mode.</td></tr>
+    <tr><td>Overview</td><td>KPIs, throughput/flag timeline, distribution, latency, live confusion matrix, top accounts and alerts.</td></tr>
+    <tr><td>Live monitor</td><td>Buffered transaction table, risk/search filters, pause, row keyboard activation and detail drawer.</td></tr>
+    <tr><td>Fraud alerts</td><td>Severity/status filters, alert reasons, optimistic triage updates.</td></tr>
+    <tr><td>High-risk accounts</td><td>Risk ranking, search/level filters and expandable weighted signals.</td></tr>
+    <tr><td>Model analytics</td><td>PR curve, candidates, confusion matrices, threshold strategy, split, latency and leakage.</td></tr>
+    <tr><td>Dataset &amp; stream</td><td>Cleaning/EDA profile, fraud-index presets, uploads and stream start from uploaded CSV.</td></tr>
+  </tbody></table>
+  <div class="callout good"><strong>Interaction evidence:</strong> 32/32 browser checks passed, including auth guard/return route, stream control, KPI changes, filters, search, pause/resume, detail drawers, alert triage, account expansion, 404, sign-out, and mobile navigation. No console errors were observed.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">06 · Frontend evidence</div><h2>Operational views populated with live local data</h2><p>Latest captured views were generated against the running API after replaying held-out transactions near indexed fraud.</p></div>
+  <div class="screenshot"><img src="../logs/screens/console-overview.png" alt="FraudStream dashboard overview"><div class="caption">Detection overview: 260 processed transactions, two critical detections, two high-risk accounts, and measured live latency inside the 50 ms budget.</div></div>
+  <div class="image-grid">
+    <div class="screenshot"><img src="../logs/screens/console-monitor.png" alt="Live monitor"><div class="caption">Live monitor with 120 buffered rows, filters, labels and transaction detail.</div></div>
+    <div class="screenshot"><img src="../logs/screens/console-alerts.png" alt="Fraud alerts"><div class="caption">Fraud alerts with triage status and transaction context.</div></div>
+    <div class="screenshot"><img src="../logs/screens/console-accounts.png" alt="High risk accounts"><div class="caption">High-risk accounts and expandable seven-signal decomposition.</div></div>
+    <div class="screenshot"><img src="../logs/screens/console-analytics.png" alt="Model analytics"><div class="caption">Model analytics from checked-in metadata and live quality.</div></div>
+  </div>
+  <h3>Usability and accessibility observations</h3><div class="grid2"><ul><li>Single page H1, semantic tables/forms and explicit labels.</li><li>Skip link, focus treatment and keyboard-activated transaction rows.</li><li>Risk is expressed with text as well as color.</li><li>ARIA live status for stream events.</li></ul><ul><li>Responsive sidebar and mobile navigation tested.</li><li>Reduced-motion CSS support.</li><li>Lazy console bundle protects landing payload.</li><li>Consistent shared card/table/widget system.</li></ul></div>
+  <div class="callout warn"><strong>Frontend gaps:</strong> no unit/component test suite; engine-online status is based on an initial health success rather than continuous health; Realtime account payloads can temporarily replace richer API rows without signal details; optimistic alert triage has no rollback; local demo mode must never be compiled into an internet-facing build.</div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">07 · Supabase &amp; security</div><h2>Sound schema foundation, unverified live enforcement</h2><p>The migration creates five tables, indexes, Auth profile trigger, RLS policies, grants and Realtime publication membership. No live project credentials were available to apply or attack-test these controls.</p></div>
+  <table><thead><tr><th>Table</th><th>Purpose</th><th>Browser access</th><th>Engine behavior</th></tr></thead><tbody>
+    <tr><td><code>profiles</code></td><td>Auth-linked users and role</td><td>Own row select/update</td><td>Created by signup trigger</td></tr>
+    <tr><td><code>transactions</code></td><td>Scored event details</td><td>Authenticated read</td><td>Service-role batch insert</td></tr>
+    <tr><td><code>fraud_alerts</code></td><td>High/critical alerts</td><td>Authenticated read; status-only update grant</td><td>Service-role insert</td></tr>
+    <tr><td><code>account_risk</code></td><td>Rolling account summary</td><td>Authenticated read</td><td>Service-role upsert</td></tr>
+    <tr><td><code>model_metrics</code></td><td>Training run results</td><td>Authenticated read</td><td>Optional training insert</td></tr>
+  </tbody></table>
+  <div class="grid2">
+    <div class="card"><h3>Controls present</h3><ul><li>RLS enabled on all five tables.</li><li>Anon receives no detection data access.</li><li>Detection writes revoked from browser roles.</li><li>Alert update narrowed to <code>status</code>.</li><li>Service key referenced only by backend.</li><li>Exact CORS origin allowlist.</li><li>Bearer token verified against Supabase Auth and cached for 60 s.</li><li>Realtime follows authenticated select policies.</li></ul></div>
+    <div class="card"><h3>Material security gaps</h3><ul><li>Missing Supabase configuration disables auth even when <code>REQUIRE_AUTH=true</code>.</li><li>No API role checks for upload, stream control, account-mutating prediction or triage.</li><li>Own-profile update policy is not column-restricted; role self-edit can undermine future RBAC.</li><li>All authenticated users can read all detection rows; no tenant/account scope.</li><li>Absolute filesystem paths are exposed in dataset responses.</li><li>Joblib is pickle-compatible and must remain a trusted local artifact.</li></ul></div>
+  </div>
+  <div class="callout danger"><strong>Highest-priority fix:</strong> fail closed when production auth is required but Supabase verification is unavailable. Make startup fail or all protected routes return 503. Then enforce role checks server-side and prevent users from changing their own role.</div>
+  <h3>Secret handling</h3><p>No actual Supabase credentials were present in reviewed owned environment files. <code>.gitignore</code> excludes local environment files, raw/uploaded CSVs, Joblib binaries, dependencies, caches and builds. The browser uses only public Vite variables; the service-role variable is confined to backend configuration. <code>frontend/.env.local</code> has blank Supabase fields and <code>VITE_DEMO_MODE=true</code>, is gitignored, and is appropriate only for local validation.</p>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">08 · Testing &amp; verification</div><h2>All available local checks pass</h2><p>The newest aggregate verification is authoritative for test count: 60 pytest cases, 30 HTTP smoke checks, 32 browser interactions, successful production build, and no relevant IDE diagnostics.</p></div>
+  <div class="grid4">
+    <div class="card metric"><span>Pytest</span><b>60/60</b><p class="small">No stderr</p></div><div class="card metric"><span>HTTP smoke</span><b>30/30</b><p class="small">Fresh Uvicorn on port 8099</p></div><div class="card metric"><span>Browser flows</span><b>32/32</b><p class="small">Zero console errors</p></div><div class="card metric"><span>Production build</span><b>Pass</b><p class="small">991 modules · 3.39 s</p></div>
+  </div>
+  <h3>Coverage represented by the suite</h3>
+  <table class="tight"><thead><tr><th>Layer</th><th>Evidence</th><th>Notable checks</th></tr></thead><tbody>
+    <tr><td>Python unit/API</td><td>60 parameterized cases in 7 test files</td><td>Risk edges, account weights, feature parity/leakage, generator laziness/stop/invalids, processor alerts, API contracts/security, artifact latency.</td></tr>
+    <tr><td>HTTP end-to-end</td><td>30/30 smoke assertions</td><td>Model load, predict, concurrency 409, 400-event stream, live metrics/confusion matrix, alerts/triage, account escalation, upload/replay/cleanup.</td></tr>
+    <tr><td>Browser interaction</td><td>32/32 Playwright checks</td><td>Landing/auth/return URL, start/stop, data views, filters/search/pause/details, triage, mobile navigation, 404 and sign-out.</td></tr>
+    <tr><td>Visual smoke</td><td>6 console pages + landing/login screenshots</td><td>Populated tables, expected H1s, no empty states, no browser console errors or unexpected 404s.</td></tr>
+    <tr><td>Build/diagnostics</td><td>Vite build + IDE diagnostics</td><td>991 modules transformed; split console bundle; zero diagnostics across 37 source files in prior validation.</td></tr>
+  </tbody></table>
+  <div class="callout"><strong>Log reconciliation.</strong> An earlier standalone log collected 53 tests. The later <code>verify-all-pytest.log</code> contains 60 passing dots and no stderr after additional test coverage was added; this report therefore uses 60 as the latest result. The root README’s “53 tests” statement is now stale.</div>
+  <h3>Remaining test gaps</h3><ul><li>No live Supabase migration, RLS, Auth, Realtime or persistence integration test.</li><li>No frontend unit/component suite; browser tools rely on a machine-specific Playwright runtime and Edge installation.</li><li>CI lacks lint/type/security/dependency checks and skips artifact-dependent model/runtime tests.</li><li>No load, restart/recovery, queue-overflow, persistence retry, multi-worker, or production smoke evidence.</li></ul>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">09 · PRD traceability</div><h2>Functional requirements</h2><p>Status reflects implementation plus demonstrable evidence, not code intent alone.</p></div>
+  <table class="tight"><thead><tr><th>ID</th><th>Requirement</th><th>Status</th><th>Evidence &amp; gap</th></tr></thead><tbody>
+    <tr><td>FR-001</td><td>Dataset upload</td><td><span class="status partial">Partial</span></td><td>API/UI/upload replay work; schema is not validated on upload and access is not role-restricted.</td></tr>
+    <tr><td>FR-002</td><td>Data preprocessing</td><td><span class="status implemented">Implemented</span></td><td>Cleaning, range checks, imputation, scaling, target separation and chronological split.</td></tr>
+    <tr><td>FR-003</td><td>Feature engineering</td><td><span class="status partial">Partial</span></td><td>Amount/time and prior account context exist; identity/history features are synthetic, not genuine business data.</td></tr>
+    <tr><td>FR-004</td><td>Class imbalance handling</td><td><span class="status implemented">Implemented</span></td><td>Weights, optional train-only SMOTE, precision-recall analysis and threshold tuning.</td></tr>
+    <tr><td>FR-005</td><td>Model training</td><td><span class="status implemented">Implemented</span></td><td>Logistic, random forest, XGBoost and Isolation Forest trained and serialized.</td></tr>
+    <tr><td>FR-006</td><td>Model selection</td><td><span class="status implemented">Implemented</span></td><td>PR-AUC/ROC-AUC/precision/recall/F1/FPR and latency; XGBoost selected by quality plus headroom.</td></tr>
+    <tr><td>FR-007</td><td>Threshold tuning</td><td><span class="status implemented">Implemented</span></td><td>F2 with precision floor; monotonic risk-band mapping and exact edge tests.</td></tr>
+    <tr><td>FR-008</td><td>Pseudo streaming</td><td><span class="status implemented">Implemented</span></td><td>True lazy Python generator; tests prove three consumed events parse only three rows.</td></tr>
+    <tr><td>FR-009</td><td>Real-time prediction</td><td><span class="status implemented">Implemented</span></td><td>One inference per valid event; average/p95/p99 0.97/1.59/1.93 ms serving path.</td></tr>
+    <tr><td>FR-010</td><td>Fraud alerts</td><td><span class="status implemented">Implemented</span></td><td>High/critical events create alerts; triage API/UI tested.</td></tr>
+    <tr><td>FR-011</td><td>High-risk accounts</td><td><span class="status partial">Partial</span></td><td>Seven weighted signals and escalation tested; synthetic identities and process-local history.</td></tr>
+    <tr><td>FR-012</td><td>Transaction storage</td><td><span class="status external">Unverified externally</span></td><td>Writer/migration exist; no live database proof; no retry/DLQ/rehydration/idempotent replay.</td></tr>
+    <tr><td>FR-013</td><td>Live dashboard</td><td><span class="status external">Unverified externally</span></td><td>Complete dashboard, polling and Realtime code; local UI is proven, live Supabase push timing is not.</td></tr>
+    <tr><td>FR-014</td><td>Authentication</td><td><span class="status partial">Partial</span></td><td>Auth client, session and token bridge exist; live Auth/RLS unverified, fail-open config and no RBAC.</td></tr>
+  </tbody></table>
+  <h3>Performance requirements</h3>
+  <table class="tight"><thead><tr><th>ID</th><th>Requirement</th><th>Status</th><th>Assessment</th></tr></thead><tbody>
+    <tr><td>PR-001</td><td>&lt;50 ms prediction</td><td><span class="status partial">Partial</span></td><td>Model-serving path decisively passes; full network/database/browser latency is not measured.</td></tr>
+    <tr><td>PR-002</td><td>One at a time</td><td><span class="status implemented">Implemented</span></td><td>Generator and one-call-per-event behavior directly tested.</td></tr>
+    <tr><td>PR-003</td><td>Near-real-time dashboard</td><td><span class="status external">Unverified externally</span></td><td>2 s polling local path proven; live Supabase event timing unavailable.</td></tr>
+    <tr><td>PR-004</td><td>Reliability</td><td><span class="status partial">Partial</span></td><td>Invalid rows/lifecycle handled; stream-wide prediction failures and persistence loss need recovery.</td></tr>
+    <tr><td>PR-005</td><td>Kafka/Redis path</td><td><span class="status partial">Partial</span></td><td>Source interface is replaceable conceptually; no durable offset, adapter or distributed state.</td></tr>
+  </tbody></table>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">09 · PRD traceability</div><h2>Success criteria &amp; deliverables</h2><p>Local engineering deliverables are mostly present. External infrastructure and the presentation/deployed-demo package are the unfinished end of the PRD.</p></div>
+  <h3>Success criteria</h3>
+  <table class="tight"><thead><tr><th>ID</th><th>Criterion</th><th>Status</th><th>Assessment</th></tr></thead><tbody>
+    <tr><td>SC-001</td><td>Train a fraud/anomaly model</td><td><span class="status implemented">Implemented</span></td><td>Four candidates and checked-in trained metadata/artifacts.</td></tr>
+    <tr><td>SC-002</td><td>Sequential generator</td><td><span class="status implemented">Implemented</span></td><td>Lazy generator implementation and tests.</td></tr>
+    <tr><td>SC-003</td><td>Every transaction scored</td><td><span class="status implemented">Implemented</span></td><td>Every valid event gets one score; invalid schema is rejected intentionally.</td></tr>
+    <tr><td>SC-004</td><td>High-risk alerts</td><td><span class="status implemented">Implemented</span></td><td>Four alerts demonstrated in 400-event smoke run.</td></tr>
+    <tr><td>SC-005</td><td>Repeated suspicion flags accounts</td><td><span class="status partial">Partial</span></td><td>Mechanism works; identities/history are synthetic and process-local.</td></tr>
+    <tr><td>SC-006</td><td>Imbalance-aware evaluation</td><td><span class="status implemented">Implemented</span></td><td>PR-AUC, precision, recall, F1, FPR and confusion matrices.</td></tr>
+    <tr><td>SC-007</td><td>Measured &lt;50 ms</td><td><span class="status partial">Partial</span></td><td>Serving inference measured; not full end-to-end latency.</td></tr>
+    <tr><td>SC-008</td><td>Near-real-time React updates</td><td><span class="status external">Unverified externally</span></td><td>Local polling and code complete; live Realtime unverified.</td></tr>
+    <tr><td>SC-009</td><td>Secure Supabase storage</td><td><span class="status external">Unverified externally</span></td><td>Migration/writer present; no applied-project security proof.</td></tr>
+    <tr><td>SC-010</td><td>Deployed and demonstrable</td><td><span class="status missing">Not implemented</span></td><td>No production URL, provider history or production smoke evidence.</td></tr>
+  </tbody></table>
+  <h3>Final deliverables</h3>
+  <table class="tight"><thead><tr><th>Deliverable</th><th>Status</th><th>Evidence / limitation</th></tr></thead><tbody>
+    <tr><td>React 16 frontend; Python ML engine; FastAPI service</td><td><span class="status implemented">Implemented</span></td><td>Complete owned source and successful local build/API validations.</td></tr>
+    <tr><td>Trained model; generator; dashboard</td><td><span class="status implemented">Implemented</span></td><td>Artifacts/metadata, lazy stream tests, six operational views and dataset page.</td></tr>
+    <tr><td>API docs; schema; model report; deployment docs</td><td><span class="status implemented">Implemented</span></td><td>All named documents and migration present.</td></tr>
+    <tr><td>Supabase database</td><td><span class="status external">Unverified externally</span></td><td>Schema/seed exist; no live project application evidence.</td></tr>
+    <tr><td>GitHub repository</td><td><span class="status external">Unverified externally</span></td><td>CI workflow/source exist; remote repository presence was not established.</td></tr>
+    <tr><td>Live deployed application</td><td><span class="status missing">Not implemented</span></td><td>No URL, host config or production verification.</td></tr>
+    <tr><td>Hackathon presentation/demo artifact</td><td><span class="status missing">Not implemented</span></td><td>README demo flow exists; no deck, video or verified hosted demo.</td></tr>
+  </tbody></table>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">10 · Deployment readiness</div><h2>Documentation exists; clean deployment is incomplete</h2><p>The target topology—Vercel, Render/Railway, Supabase and GitHub Actions—is documented, but a clean checkout cannot yet deploy the complete runtime without manual artifact provisioning.</p></div>
+  <div class="grid3">
+    <div class="card"><h3>Frontend</h3><p><span class="status partial">Partial</span></p><p>Vite build passes. No checked-in <code>vercel.json</code> or Netlify rewrite, so SPA deep links require a manual step. Demo mode must be disabled.</p></div>
+    <div class="card"><h3>Detection engine</h3><p><span class="status partial">Partial</span></p><p>Start/build commands are documented. Joblib and stream CSV are ignored, while the documented build only installs packages; model/data must be supplied out of band.</p></div>
+    <div class="card"><h3>Supabase</h3><p><span class="status external">Unverified externally</span></p><p>Migration and setup are complete on paper. No CLI project config, applied migration state, keys, live RLS test, or Realtime evidence.</p></div>
+  </div>
+  <h3>CI assessment</h3><table class="tight"><thead><tr><th>Strength</th><th>Gap</th></tr></thead><tbody>
+    <tr><td>Python 3.12 job installs pinned requirements and runs pytest.</td><td>Artifact-dependent tests skip because Joblibs/stream data are not committed.</td></tr>
+    <tr><td>Node 20 job installs and builds the frontend.</td><td>CI comments say no lockfile; <code>pnpm-lock.yaml</code> exists, but CI uses non-reproducible <code>npm install</code>.</td></tr>
+    <tr><td>Runs on push and pull request.</td><td>No lint (and ESLint is not declared), browser smoke, database test, type check, migration validation, dependency scan, or deploy check.</td></tr>
+  </tbody></table>
+  <h3>Production readiness checklist</h3>
+  <table class="tight"><thead><tr><th>Control</th><th>State</th><th>Required action</th></tr></thead><tbody>
+    <tr><td>Fail-closed authentication</td><td><span class="status missing">Missing</span></td><td>Refuse startup/protected requests when production Supabase verification cannot initialize.</td></tr>
+    <tr><td>Role authorization</td><td><span class="status missing">Missing</span></td><td>Enforce analyst/admin/developer capabilities in API and database.</td></tr>
+    <tr><td>Durable recovery</td><td><span class="status missing">Missing</span></td><td>Read persisted history/account state and support restart without reset.</td></tr>
+    <tr><td>Idempotent persistence</td><td><span class="status partial">Partial</span></td><td>Use run/source-scoped IDs, upserts/conflict policy, retries and dead-letter handling.</td></tr>
+    <tr><td>Deployment manifests</td><td><span class="status missing">Missing</span></td><td>Add Vercel rewrite, engine container/provider manifest and deterministic artifact acquisition.</td></tr>
+    <tr><td>Live integration proof</td><td><span class="status external">Blocked</span></td><td>Provision Supabase/hosts and run automated RLS/Auth/Realtime/production smoke tests.</td></tr>
+  </tbody></table>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">11 · Risks &amp; recommendations</div><h2>Prioritized remediation plan</h2><p>Recommendations are ordered by the amount of risk they remove, not by implementation convenience.</p></div>
+  <div class="recommend"><div class="n">1</div><div><h3>Make authentication fail closed and add authorization</h3><p>When <code>REQUIRE_AUTH=true</code>, missing/unreachable Supabase verification must not produce a development user. Add explicit role checks for upload, stream lifecycle, account-mutating scoring and model/config actions. Restrict profile role updates to service/admin paths.</p></div></div>
+  <div class="recommend"><div class="n">2</div><div><h3>Make persistence recoverable and idempotent</h3><p>Namespace transaction identity by source and run, define conflict behavior, retry transient failures with bounded backoff, expose accurate success/failure counters, and add a dead-letter path. Do not remove failed batches silently.</p></div></div>
+  <div class="recommend"><div class="n">3</div><div><h3>Promote Postgres from write sink to system of record</h3><p>Load recent transactions, alerts and account state on startup and for dashboard reads. Persist signal/history state needed for correct account continuation. Decide reset semantics explicitly instead of clearing by default.</p></div></div>
+  <div class="recommend"><div class="n">4</div><div><h3>Provision and test Supabase end to end</h3><p>Apply migration in a dedicated environment; automate tests for anon/authenticated/service roles, role self-edit prevention, Auth token verification, status-only alert updates, persistence, Realtime delivery and restart hydration.</p></div></div>
+  <div class="recommend"><div class="n">5</div><div><h3>Create reproducible deployment artifacts</h3><p>Add Vercel rewrite and Render/Railway/Docker configuration, pin the frontend package-manager workflow to the committed lockfile, and define how model/stream artifacts are fetched or trained during build. Run production smoke tests.</p></div></div>
+  <div class="recommend"><div class="n">6</div><div><h3>Expand portable automated quality gates</h3><p>Add frontend unit/component tests, package-local Playwright dependency/configuration, lint tooling, migration checks, dependency/security scanning, and artifact-backed API/latency tests in CI. Remove hard-coded user cache paths.</p></div></div>
+  <div class="recommend"><div class="n">7</div><div><h3>Clarify model and product claims</h3><p>Call the measured value model-serving latency, not full end-to-end latency. Label synthetic identity/account behavior prominently. Validate binary labels, guard one-class/small splits, and move candidate latency selection off the final test frame.</p></div></div>
+  <div class="recommend"><div class="n">8</div><div><h3>Define the scale-out boundary</h3><p>Before Kafka/Redis claims, separate ingestion into a durable worker, define event keys/offsets/idempotency, externalize account state, and make API reads stateless. Keep one worker until this redesign is complete.</p></div></div>
+</section>
+
+<section class="section">
+  <div class="section-head"><div class="kicker">12 · Conclusion</div><h2>Audit conclusion</h2><p>FraudStream AI fulfills the central engineering idea in its PRD: transactions are processed sequentially through a Python generator, scored with a trained low-latency model, mapped to actionable risk, aggregated into account risk, and displayed in a polished analyst interface.</p></div>
+  <div class="callout good"><strong>Local verification is strong.</strong> The latest evidence shows 60/60 pytest cases, 30/30 HTTP checks, 32/32 browser interactions, a successful Vite production build, zero browser console errors, and measured p95 model-serving latency of 1.588 ms against a 50 ms target.</div>
+  <p>The application is therefore suitable for local demonstration, portfolio review, and continued engineering. It should not yet be represented as a secure, durable, production-deployed fraud platform. The distinction is concentrated in external integration and operations: live Supabase enforcement, role authorization, database recovery, persistence guarantees, deployment manifests, and production smoke evidence.</p>
+  <div class="grid3" style="margin-top:6mm">
+    <div class="card metric"><span>Local demo readiness</span><b style="color:var(--green)">High</b><p>Core paths are measured and visually verified.</p></div>
+    <div class="card metric"><span>Deployment readiness</span><b style="color:var(--amber)">Medium</b><p>Documented topology; artifact/manifests incomplete.</p></div>
+    <div class="card metric"><span>Production readiness</span><b style="color:var(--red)">Low</b><p>Authorization, durability and external proof required.</p></div>
+  </div>
+  <h3>Verification boundaries</h3><ul><li>No user Supabase project URL, anon key or service-role key was available; live RLS/Auth/Realtime/persistence was not tested.</li><li>No Vercel, Render/Railway, GitHub or Supabase account access was available; deployment was not performed or claimed.</li><li>Binary model artifacts and large datasets were not interpreted as source text; they were exercised through successful runtime tests and cross-checked through metadata.</li></ul>
+  <div style="margin-top:18mm;padding:8mm;background:var(--navy);color:#fff;border-radius:2mm"><div class="eyebrow">Final disposition</div><h2 style="color:#fff;margin:2mm 0 3mm">Conditionally approved for demonstration</h2><p style="margin:0;color:#c7d1df">Proceed with the local demo. Complete recommendations 1–5 before production deployment or use with real payment/customer data.</p></div>
+  <p class="footnote">Generated from the repository state and local validation evidence available on 13 August 2026. Primary sources: <code>docs/PRD.json</code>, project source/tests/configuration, <code>model_metadata.json</code>, dataset profile/index metadata, validation logs, and UI screenshots.</p>
+</section>
+</body>
+</html>

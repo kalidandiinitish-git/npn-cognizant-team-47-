@@ -1,0 +1,22 @@
+
+--------------------------------------------------------------------------------------------------
+FraudStream AI - model comparison (validation split)
+--------------------------------------------------------------------------------------------------
+model                      PR-AUC  ROC-AUC     prec   recall       F1      thr   p95 ms    fit s
+random_forest              0.8715   0.9783   0.9375   0.8182   0.8738   0.2372  33.1625     44.0
+xgboost                    0.8472   0.9880   0.8824   0.8182   0.8491   0.1842   1.7613      4.8
+logistic_regression        0.8414   0.9817   0.8431   0.7818   0.8113   1.0000   2.2330      1.1
+isolation_forest           0.0553   0.9541   0.0812   0.5273   0.1408   0.9777   6.1328      2.0
+--------------------------------------------------------------------------------------------------
+Selected model      : xgboost (XGBClassifier)
+Decision threshold  : 0.1842  [max_f2_with_precision_floor]
+Test PR-AUC         : 0.7629
+Test ROC-AUC        : 0.9737
+Test precision      : 0.7500
+Test recall         : 0.7500
+Test F1             : 0.7500
+False positive rate : 0.0003
+Confusion matrix    : TP=39 FP=13 FN=13 TN=42495
+Latency (1 txn)     : avg=0.9739ms p95=1.588ms p99=1.932ms target<50ms -> PASS
+--------------------------------------------------------------------------------------------------
+

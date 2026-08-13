@@ -1,0 +1,6 @@
+launched: msedge
+landing-top: h1="Catch card fraud in the first 50 milliseconds" nodes=492 -> C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\logs\screens\landing-top.png
+landing-full: h1="Catch card fraud in the first 50 milliseconds" nodes=492 -> C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\logs\screens\landing-full.png
+login: h1="Sign in to the console" nodes=103 -> C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\logs\screens\login.png
+guard: /app landed on /login
+console-errors: none

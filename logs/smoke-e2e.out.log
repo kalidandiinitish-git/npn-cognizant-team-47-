@@ -1,0 +1,26 @@
+Starting uvicorn on port 8099 ...
+[PASS] engine responds on /api/health
+[PASS] model artifacts loaded - xgboost
+[PASS] stream source present
+[PASS] POST /api/predict returns 200
+[PASS] prediction has a risk band and latency - score=0.0 level=low latency=2.27ms
+[PASS] latency inside the target - 2.27ms < 50.0ms
+[PASS] stream file indexed for labelled fraud - 52 frauds, first at row 1326
+[PASS] POST /api/stream/start returns 200
+[PASS] generator processed 400 transactions - processed=400
+[PASS] stream stops cleanly - completed
+[PASS] GET /api/metrics reports totals - 400 transactions, 4 flagged, 4 high-risk accounts
+[PASS] measured latency beats the 50 ms budget - avg=0.868ms p95=1.499ms p99=1.834ms
+[PASS] every transaction landed in a risk band
+[PASS] GET /api/transactions/recent returns rows
+[PASS] fraud alerts were raised - 4 alerts, types: critical_fraud_probability
+[PASS] alert carries a transaction, account and band - TXN-0001680 ACC-00102 critical
+[PASS] alert status can be triaged
+[PASS] GET /api/accounts/high-risk responds - 10 accounts
+[PASS] accounts escalated to high risk - 4 accounts at high or critical
+[PASS] account detail exposes the signal breakdown
+[PASS] GET /api/model exposes the evaluation report - xgboost PR-AUC=0.762879
+[PASS] GET /api/dataset/info resolves the dataset - stream_test.csv (42560 rows)
+[PASS] live confusion matrix covers every scored transaction
+------------------------------------------------------------------------
+23/23 checks passed

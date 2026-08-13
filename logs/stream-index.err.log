@@ -1,0 +1,1 @@
+INFO    Indexed stream_test.csv: 52 fraud rows in 42560, first at row 1326, densest window {'start': 9763, 'fraud_count': 5, 'window_size': 400, 'end': 10163}

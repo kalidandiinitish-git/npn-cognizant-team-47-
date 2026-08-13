@@ -1,0 +1,21 @@
+12:50:32 INFO    src.preprocessing.loader | Loading dataset from C:\Users\Nitish\OneDrive\Documents\npn team 47\creditcard.csv
+12:50:34 INFO    src.preprocessing.loader | Loaded 284,807 rows x 31 columns
+12:50:35 INFO    train | Cleaning report: {"rows_in": 284807, "duplicates_removed": 1081, "rows_with_missing_values_dropped": 0, "out_of_range_rows_dropped": 0, "fraud_rows": 473, "legitimate_rows": 283253, "fraud_rate": 0.001667101358352777, "imbalance_ratio": 598.8435517970402, "rows_out": 283726, "amount_min": 0.0, "amount_max": 25691.16, "amount_mean": 88.47268731099724, "time_min": 0.0, "time_max": 172792.0}
+12:50:35 INFO    src.preprocessing.loader | Time aware split -> train=198,608 rows (fraud=366) | validation=42,558 rows (fraud=55) | test=42,560 rows (fraud=52)
+12:50:35 INFO    train | Wrote dataset profile to C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\ml-engine\data\dataset_profile.json
+12:50:37 INFO    train | Wrote held-out stream file (42,560 rows) to C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\ml-engine\data\stream_test.csv
+12:50:38 INFO    train | Training class balance: 366 fraud / 198,242 legitimate (0.1843 %)
+12:50:38 INFO    train | --- Training logistic_regression ---
+C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\ml-engine\.venv\Lib\site-packages\sklearn\linear_model\_logistic.py:451: OptimizeWarning: Unknown solver options: iprint
+  opt_res = optimize.minimize(
+12:50:40 INFO    train | logistic_regression    PR-AUC=0.841428 recall=0.781818 precision=0.843137 p95=2.233ms
+12:50:40 INFO    train | --- Training random_forest ---
+12:51:36 INFO    train | random_forest          PR-AUC=0.871516 recall=0.818182 precision=0.9375 p95=33.1625ms
+12:51:36 INFO    train | --- Training isolation_forest ---
+12:51:40 INFO    train | isolation_forest       PR-AUC=0.055279 recall=0.527273 precision=0.081232 p95=6.1328ms
+12:51:40 INFO    train | --- Training xgboost ---
+12:51:46 INFO    train | xgboost                PR-AUC=0.847199 recall=0.818182 precision=0.882353 p95=1.7613ms
+12:51:46 INFO    train | Excluded random_forest from selection: higher PR-AUC but p95 latency above the 25.0 ms comfort threshold.
+12:51:46 INFO    train | Selected xgboost | test PR-AUC=0.762879 recall=0.75 precision=0.75 | p95 latency=1.588ms
+12:51:46 INFO    train | Saved artifacts to C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\ml-engine\models
+12:51:46 INFO    train | Supabase not configured; skipping model_metrics upload.

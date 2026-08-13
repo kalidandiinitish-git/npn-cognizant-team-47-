@@ -1,0 +1,19 @@
+stream start: 200 skip=1311
+stream finished: processed=600 status=completed
+console-overview: h1="Detection overview" tableRows=0 emptyStates=3
+console-monitor: h1="Live transaction monitor" tableRows=0 emptyStates=2
+console-alerts: h1="Fraud alerts" tableRows=0 emptyStates=1
+console-accounts: h1="High-risk accounts" tableRows=0 emptyStates=1
+console-analytics: h1="Model analytics" tableRows=0 emptyStates=1
+console-dataset: h1="Dataset and stream" tableRows=8 emptyStates=0
+console-errors:
+  Access to XMLHttpRequest at 'http://localhost:8000/api/health' from origin 'http://localhost:4174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  Failed to load resource: net::ERR_FAILED
+  Access to XMLHttpRequest at 'http://localhost:8000/api/model' from origin 'http://localhost:4174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  Failed to load resource: net::ERR_FAILED
+  Access to XMLHttpRequest at 'http://localhost:8000/api/dataset/info' from origin 'http://localhost:4174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  Failed to load resource: net::ERR_FAILED
+  Access to XMLHttpRequest at 'http://localhost:8000/api/metrics' from origin 'http://localhost:4174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  Failed to load resource: net::ERR_FAILED
+  Access to XMLHttpRequest at 'http://localhost:8000/api/transactions/recent?limit=120' from origin 'http://localhost:4174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  Failed to load resource: net::ERR_FAILED

@@ -1,0 +1,44 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------- Node ----------
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ---------- Environment ----------
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ---------- Data / model artifacts ----------
+# The raw dataset is large (~150 MB) and is not committed.
+ml-engine/data/*.csv
+ml-engine/data/uploads/
+ml-engine/data/*.parquet
+ml-engine/models/*.joblib
+!ml-engine/models/.gitkeep
+!ml-engine/data/.gitkeep
+
+# Keep the metadata so reviewers can read the evaluation report without retraining.
+!ml-engine/models/model_metadata.json
+
+# ---------- Editor / OS ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

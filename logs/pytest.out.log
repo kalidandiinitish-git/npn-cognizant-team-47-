@@ -1,0 +1,22 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.13, pytest-8.3.4, pluggy-1.6.0
+rootdir: C:\Users\Nitish\OneDrive\Documents\npn team 47\fraudstream-ai\ml-engine
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.14.2
+collected 53 items
+
+tests\test_api.py ..........                                             [ 18%]
+tests\test_features.py ......                                            [ 30%]
+tests\test_generator.py ..........                                       [ 49%]
+tests\test_latency.py ...                                                [ 54%]
+tests\test_processor.py .......                                          [ 67%]
+tests\test_risk.py .................                                     [100%]
+
+============================= slowest 5 durations =============================
+1.00s setup    tests/test_api.py::test_health_is_public_and_reports_readiness
+0.31s call     tests/test_api.py::test_stream_lifecycle_and_metrics
+0.29s call     tests/test_latency.py::test_single_transaction_latency_is_within_target
+0.02s call     tests/test_latency.py::test_every_prediction_returns_a_probability
+0.02s call     tests/test_api.py::test_dataset_info_reports_the_source
+============================= 53 passed in 2.37s ==============================

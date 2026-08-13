@@ -1,0 +1,52 @@
+{
+  "source": "C:\\Users\\Nitish\\OneDrive\\Documents\\npn team 47\\fraudstream-ai\\docs\\FraudStream-AI-Project-Report.html",
+  "output": "C:\\Users\\Nitish\\OneDrive\\Documents\\npn team 47\\fraudstream-ai\\docs\\FraudStream-AI-Project-Report.pdf",
+  "inspection": {
+    "title": "FraudStream AI — Project Audit & Verification Report",
+    "sections": 17,
+    "tables": 19,
+    "rows": 110,
+    "images": [
+      {
+        "source": "../logs/screens/landing-top.png",
+        "loaded": true,
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "source": "../logs/screens/console-overview.png",
+        "loaded": true,
+        "width": 1500,
+        "height": 1020
+      },
+      {
+        "source": "../logs/screens/console-monitor.png",
+        "loaded": true,
+        "width": 1500,
+        "height": 1020
+      },
+      {
+        "source": "../logs/screens/console-alerts.png",
+        "loaded": true,
+        "width": 1500,
+        "height": 1020
+      },
+      {
+        "source": "../logs/screens/console-accounts.png",
+        "loaded": true,
+        "width": 1500,
+        "height": 1020
+      },
+      {
+        "source": "../logs/screens/console-analytics.png",
+        "loaded": true,
+        "width": 1500,
+        "height": 1020
+      }
+    ],
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  "browserFailures": []
+}

@@ -1,0 +1,10 @@
+stream start: 200 skip=1311
+stream finished: processed=260 status=completed
+console-overview: h1="Detection overview" tableRows=10 emptyStates=0
+console-monitor: h1="Live transaction monitor" tableRows=120 emptyStates=0
+console-alerts: h1="Fraud alerts" tableRows=2 emptyStates=0
+console-accounts: h1="High-risk accounts" tableRows=2 emptyStates=0
+console-analytics: h1="Model analytics" tableRows=4 emptyStates=0
+console-dataset: h1="Dataset and stream" tableRows=8 emptyStates=0
+console-errors: none
+not-found: none

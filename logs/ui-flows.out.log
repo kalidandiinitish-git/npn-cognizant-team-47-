@@ -1,0 +1,35 @@
+[PASS] landing renders its headline
+[PASS] landing shows the risk band table
+[PASS] in-page anchor navigation works
+[PASS] protected route redirects an anonymous visitor - http://127.0.0.1:5173/login
+[PASS] sign-in returns to the originally requested page - http://127.0.0.1:5173/app/monitor
+[PASS] overview loads after sign-in
+[PASS] stream settings panel opens
+[PASS] start position presets are offered - 3 options
+[PASS] stream starts from the UI and the button flips to Stop
+[PASS] engine confirms the UI-started run - processed=81 skip=1311 delay=40ms
+[PASS] overview KPI reflects the running stream - tile reads 140 transactions
+[PASS] monitor lists scored transactions - 120 rows
+[PASS] risk band filter narrows the table - 119 rows, all Low
+[PASS] search filters to a single transaction - "TXN-0001556" -> 1 row
+[PASS] pausing the feed shows a notice
+[PASS] feed resumes
+[PASS] clicking a row opens the detail drawer
+[PASS] drawer shows behavioural context
+[PASS] drawer explains the ground-truth label
+[PASS] drawer closes
+[PASS] alerts page lists raised alerts - 4 alerts
+[PASS] alert triage persists to the engine - ui=investigating engine=investigating
+[PASS] status filter finds the triaged alert
+[PASS] accounts page lists escalated accounts - 4 rows
+[PASS] expanding an account reveals the weighted signals
+[PASS] stream reached a terminal state - completed
+[PASS] unknown route renders the 404 page
+[PASS] signing out re-enables the auth guard - http://127.0.0.1:5173/login
+[PASS] landing renders on a phone viewport
+[PASS] mobile navigation opens
+[PASS] console loads on a phone viewport
+[PASS] console sidebar opens on mobile
+------------------------------------------------------------------------
+console errors: none
+32/32 interaction checks passed

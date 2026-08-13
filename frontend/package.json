@@ -1,0 +1,41 @@
+{
+  "name": "fraudstream-ai-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FraudStream AI dashboard - React 16 + Tailwind + Recharts + Supabase",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "lint": "eslint src --ext .js,.jsx"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.48.1",
+    "axios": "1.7.9",
+    "react": "16.14.0",
+    "react-dom": "16.14.0",
+    "react-router-dom": "5.3.4",
+    "recharts": "2.12.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.17",
+    "vite": "5.4.11"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "browserslist": [
+    ">0.3%",
+    "not dead",
+    "not op_mini all"
+  ]
+}
