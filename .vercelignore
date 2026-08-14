@@ -1,0 +1,18 @@
+# Vercel only builds the dashboard: `vercel.json` runs the build inside
+# frontend/ and serves frontend/dist. Everything below belongs to the detection
+# engine, which is deployed separately (render.yaml) because its stream loop is
+# a background thread with in-memory state and cannot run on serverless.
+#
+# Without this the deploy uploads the engine's 13 MB held-out split, the trained
+# artifacts and 33 committed run logs on every build, none of which the static
+# bundle can use.
+
+ml-engine/
+supabase/
+tools/
+docs/
+logs/
+
+*.pdf
+*.md
+!frontend/**
