@@ -16,6 +16,7 @@ export default function StreamControls() {
   const [delay, setDelay] = useState(120);
   const [persist, setPersist] = useState(true);
   const [skip, setSkip] = useState(0);
+  const [source, setSource] = useState('stream_test.csv');
   const [message, setMessage] = useState(null);
   const popover = useRef(null);
 
@@ -68,6 +69,7 @@ export default function StreamControls() {
   const modelMissing = health && health.model_loaded === false;
 
   const settings = () => ({
+    source: source || 'stream_test.csv',
     limit: Number(limit),
     delay_ms: Number(delay),
     skip: Number(skip),
@@ -143,10 +145,29 @@ export default function StreamControls() {
         >
           <p className="text-[13.5px] font-semibold text-ink-900">Stream settings</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
-            Replays the held-out test split through the Python generator.
+            Replays transactions through the streaming detection pipeline.
           </p>
 
-          <label className="mt-4 block" htmlFor="stream-limit">
+          {dataset && dataset.uploads && dataset.uploads.length ? (
+            <label className="mt-3 block" htmlFor="stream-source">
+              <span className="field-label">Dataset source</span>
+              <select
+                id="stream-source"
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+                className="field-input py-1.5 text-[12.5px]"
+              >
+                <option value="stream_test.csv">Default test split (stream_test.csv)</option>
+                {dataset.uploads.map((u) => (
+                  <option key={u.name} value={u.name}>
+                    {u.name} ({Number(u.rows).toLocaleString()} rows)
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <label className="mt-3 block" htmlFor="stream-limit">
             <span className="field-label">Transactions to replay</span>
             <input
               id="stream-limit"

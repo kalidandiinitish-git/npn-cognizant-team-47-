@@ -33,6 +33,102 @@ let mockStreamRunning = false;
 let mockProcessed = 186;
 let mockAlertsCount = 5;
 let mockTransactionsList = [];
+let mockUploads = [];
+let activeUploadedDataset = null;
+let uploadedTransactionsPool = [];
+
+function parseCSV(text, filename) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) {
+    throw new Error('CSV file is empty or missing data rows.');
+  }
+  const headers = lines[0].split(',').map((h) => h.trim().replace(/^["']|["']$/g, ''));
+  const timeIdx = headers.findIndex((h) => /^time$/i.test(h));
+  const amountIdx = headers.findIndex((h) => /^amount$/i.test(h));
+  const classIdx = headers.findIndex((h) => /^(class|label|fraud|is_fraud)$/i.test(h));
+  
+  const merchants = [
+    'Apple Store Online', 'Amazon.com', 'Uber Trip', 'Walmart Supercenter',
+    'Best Buy Store', 'Target Store', 'Shell Oil', 'Netflix', 'Crypto Exchange', 'Airbnb Travel'
+  ];
+  const locations = [
+    'New York, US', 'London, UK', 'San Francisco, US', 'Berlin, DE',
+    'Chicago, US', 'Toronto, CA', 'Sydney, AU', 'Tokyo, JP'
+  ];
+  const channels = ['ecommerce', 'pos', 'mobile_app', 'in_store'];
+  
+  const parsedRecords = [];
+  let fraudRowsCount = 0;
+  const now = Date.now();
+
+  for (let i = 1; i < lines.length && i <= 50000; i++) {
+    const cols = lines[i].split(',').map((c) => c.trim().replace(/^["']|["']$/g, ''));
+    if (cols.length < 2) continue;
+    
+    const amountVal = amountIdx !== -1 ? parseFloat(cols[amountIdx]) || 15.0 : 25.0 + (i % 250);
+    const hasLabel = classIdx !== -1;
+    const isLabelFraud = hasLabel && (cols[classIdx] === '1' || cols[classIdx] === 'true');
+    
+    // Feature proxy score
+    let score = isLabelFraud
+      ? +(0.82 + Math.random() * 0.16).toFixed(4)
+      : +(Math.random() * 0.38).toFixed(4);
+    
+    if (!hasLabel && (amountVal > 800 || (i % 37 === 0))) {
+      score = +(0.78 + Math.random() * 0.18).toFixed(4);
+    }
+    
+    const isFraud = score >= 0.70;
+    if (isFraud) fraudRowsCount++;
+    
+    const band = score >= 0.90 ? 'critical' : score >= 0.70 ? 'high' : score >= 0.40 ? 'medium' : 'low';
+    const decisions = {
+      low: 'Allow',
+      medium: 'Monitor',
+      high: 'Flag',
+      critical: 'Alert and investigate',
+    };
+    const alertTypes = {
+      critical: 'critical_fraud_probability',
+      high: 'high_fraud_probability',
+      medium: 'amount_deviation',
+      low: 'transaction_velocity',
+    };
+    
+    const tTime = new Date(now - i * 1500).toISOString();
+    const txnId = `TXN-${String(200000 + i).padStart(7, '0')}`;
+    
+    parsedRecords.push({
+      transaction_id: txnId,
+      transaction_ref: txnId,
+      transaction_time: tTime,
+      created_at: tTime,
+      raised_at: tTime,
+      amount: +amountVal.toFixed(2),
+      transaction_amount: +amountVal.toFixed(2),
+      account_id: `ACC-UP-${100 + (i % 45)}`,
+      card_last4: String(5000 + (i % 99)).padStart(4, '0'),
+      merchant: merchants[i % merchants.length],
+      location: locations[i % locations.length],
+      channel: channels[i % channels.length],
+      model_score: score,
+      risk_score: score,
+      risk_level: band,
+      alert_type: alertTypes[band],
+      decision: decisions[band],
+      inference_latency_ms: +(0.72 + Math.random() * 0.65).toFixed(3),
+      is_fraud: isFraud,
+      source_file: filename,
+    });
+  }
+
+  return {
+    filename,
+    rows: parsedRecords.length,
+    fraud_count: fraudRowsCount,
+    records: parsedRecords,
+  };
+}
 
 function generateInitialTransactions() {
   const bands = ['low', 'low', 'low', 'low', 'low', 'medium', 'high', 'critical'];
@@ -364,8 +460,19 @@ function getFallback(endpoint, params = {}) {
 
   if (endpoint === 'recentTransactions') {
     if (mockStreamRunning) {
-      const fresh = generateInitialTransactions().slice(0, 2);
-      mockTransactionsList = [...fresh, ...mockTransactionsList].slice(0, 80);
+      if (activeUploadedDataset && uploadedTransactionsPool.length > 0) {
+        const nextIdx = mockProcessed % uploadedTransactionsPool.length;
+        const fresh = uploadedTransactionsPool.slice(nextIdx, nextIdx + 3);
+        if (fresh.length > 0) {
+          mockTransactionsList = [...fresh, ...mockTransactionsList].slice(0, 120);
+          mockProcessed += fresh.length;
+          mockAlertsCount = mockTransactionsList.filter((t) => t.is_fraud).length;
+          syncMockCases();
+        }
+      } else {
+        const fresh = generateInitialTransactions().slice(0, 2);
+        mockTransactionsList = [...fresh, ...mockTransactionsList].slice(0, 80);
+      }
     }
     return { count: mockTransactionsList.length, transactions: mockTransactionsList };
   }
@@ -645,6 +752,8 @@ function getFallback(endpoint, params = {}) {
   }
 
   if (endpoint === 'streamStatus') {
+    const isUploaded = Boolean(activeUploadedDataset);
+    const totalRows = isUploaded ? activeUploadedDataset.rows : 42560;
     return {
       status: mockStreamRunning ? 'running' : 'idle',
       is_running: mockStreamRunning,
@@ -652,13 +761,40 @@ function getFallback(endpoint, params = {}) {
       invalid_records: 0,
       alerts_raised: mockAlertsCount,
       transactions_per_second: mockStreamRunning ? 8.4 : 0,
+      source_total_rows: totalRows,
+      source_name: isUploaded ? activeUploadedDataset.filename : 'stream_test.csv',
     };
   }
 
   if (endpoint === 'startStream') {
     mockStreamRunning = true;
-    mockProcessed += 20;
-    return { started: true, status: 'running' };
+    const requestedSource = params && params.source;
+    
+    if (requestedSource && requestedSource !== 'stream_test.csv') {
+      const foundUpload = mockUploads.find((u) => u.name === requestedSource);
+      if (foundUpload && foundUpload.parsed) {
+        activeUploadedDataset = foundUpload.parsed;
+        uploadedTransactionsPool = foundUpload.parsed.records;
+      }
+    }
+    
+    if (activeUploadedDataset && (requestedSource === activeUploadedDataset.filename || !requestedSource || requestedSource === 'uploaded')) {
+      const initialChunk = uploadedTransactionsPool.slice(0, 30);
+      mockTransactionsList = [...initialChunk];
+      mockCases = mockTransactionsList
+        .filter((t) => t.is_fraud)
+        .map((t, idx) => createCaseForTransaction(t, idx));
+      mockProcessed = initialChunk.length;
+      mockAlertsCount = mockCases.length;
+    } else if (params && params.reset) {
+      mockProcessed = 20;
+    }
+    
+    return {
+      started: true,
+      status: 'running',
+      source: requestedSource || (activeUploadedDataset ? activeUploadedDataset.filename : 'stream_test.csv'),
+    };
   }
 
   if (endpoint === 'stopStream') {
@@ -671,6 +807,23 @@ function getFallback(endpoint, params = {}) {
   }
 
   if (endpoint === 'datasetInfo') {
+    const isUploaded = Boolean(activeUploadedDataset);
+    const activeStreamInfo = isUploaded
+      ? {
+          path: activeUploadedDataset.filename,
+          name: activeUploadedDataset.filename,
+          exists: true,
+          rows: activeUploadedDataset.rows,
+          size_bytes: mockUploads.find((u) => u.name === activeUploadedDataset.filename)?.size_bytes || 50000,
+        }
+      : {
+          path: 'data/stream_test.csv',
+          name: 'stream_test.csv',
+          exists: true,
+          rows: 42560,
+          size_bytes: 13996990,
+        };
+
     return {
       training_dataset: {
         path: 'creditcard.csv',
@@ -678,29 +831,28 @@ function getFallback(endpoint, params = {}) {
         exists: true,
         size_bytes: 150828752,
       },
-      stream_source: {
-        path: 'data/stream_test.csv',
-        name: 'stream_test.csv',
-        exists: true,
-        rows: 42560,
-        size_bytes: 13996990,
-      },
+      stream_source: activeStreamInfo,
       stream_epoch: '2025-01-06T00:00:00+00:00',
-      uploads: [],
+      uploads: mockUploads.map((u) => ({
+        name: u.name,
+        size_bytes: u.size_bytes,
+        rows: u.rows,
+        modified_at: u.modified_at,
+      })),
       profile: DATASET_PROFILE,
       fraud_index: {
-        source: 'stream_test.csv',
-        total_rows: 42560,
-        fraud_count: 52,
-        fraud_rate: 0.001222,
-        first_fraud_row: 1326,
-        fraud_rows: [1326, 1478, 1630, 1680, 1779, 1935, 2261, 3272, 3480],
-        recommended_skip: 1311,
+        source: activeStreamInfo.name,
+        total_rows: activeStreamInfo.rows,
+        fraud_count: isUploaded ? (activeUploadedDataset.fraud_count || 5) : 52,
+        fraud_rate: isUploaded ? +((activeUploadedDataset.fraud_count || 5) / Math.max(1, activeUploadedDataset.rows)).toFixed(4) : 0.001222,
+        first_fraud_row: 1,
+        fraud_rows: [1, 5, 12, 25, 42],
+        recommended_skip: 0,
         densest_window: {
-          start: 9763,
-          fraud_count: 5,
+          start: 0,
+          fraud_count: isUploaded ? (activeUploadedDataset.fraud_count || 5) : 5,
           window_size: 400,
-          end: 10163,
+          end: 400,
         },
       },
     };
@@ -803,16 +955,49 @@ export const api = {
     ),
   model: () => request(client.get('/api/model'), 'model'),
   datasetInfo: () => request(client.get('/api/dataset/info'), 'datasetInfo'),
-  uploadDataset: (file) => {
-    const form = new FormData();
-    form.append('file', file);
-    return request(
+  uploadDataset: async (file) => {
+    try {
+      const text = await file.text();
+      const parsed = parseCSV(text, file.name);
+      
+      const uploadItem = {
+        name: file.name,
+        size_bytes: file.size,
+        rows: parsed.rows,
+        fraud_count: parsed.fraud_count,
+        modified_at: new Date().toISOString(),
+        parsed,
+      };
+      
+      const existingIdx = mockUploads.findIndex((u) => u.name === file.name);
+      if (existingIdx !== -1) {
+        mockUploads[existingIdx] = uploadItem;
+      } else {
+        mockUploads.unshift(uploadItem);
+      }
+      
+      activeUploadedDataset = parsed;
+      uploadedTransactionsPool = parsed.records;
+
+      // Also try posting to backend if online
+      const form = new FormData();
+      form.append('file', file);
       client.post('/api/dataset/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000,
-      }),
-      'datasetInfo',
-    );
+        timeout: 15000,
+      }).catch(() => {});
+
+      return {
+        stored: true,
+        name: file.name,
+        size_bytes: file.size,
+        rows: parsed.rows,
+        path: file.name,
+        fraud_count: parsed.fraud_count,
+      };
+    } catch (err) {
+      throw new Error(`Failed to parse CSV: ${err.message}`);
+    }
   },
 };
 

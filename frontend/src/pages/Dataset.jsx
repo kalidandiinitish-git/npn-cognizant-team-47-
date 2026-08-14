@@ -61,7 +61,11 @@ export default function Dataset() {
   const streamUploaded = async (name) => {
     setUploadError(null);
     try {
-      await startStream({ source: name, delay_ms: 40, limit: 2000, persist: true, reset: true });
+      if (isRunning) {
+        await stopStream();
+      }
+      await startStream({ source: name, delay_ms: 80, limit: 2000, persist: true, reset: true });
+      await refreshReference();
     } catch (error) {
       setUploadError(error.message);
     }
@@ -132,9 +136,15 @@ export default function Dataset() {
 
             <div className="mt-4 rounded-md border border-hairline bg-paper p-3.5">
               <p className="text-[12.5px] leading-relaxed text-ink-600">
-                The stream replays <span className="mono">stream_test.csv</span>, the final 15 % of
-                the timeline that training never saw. Scoring transactions the model was fitted on
-                would produce flattering numbers that mean nothing.
+                {streamSource.name && streamSource.name !== 'stream_test.csv' ? (
+                  <>
+                    Currently streaming from uploaded dataset <span className="mono font-semibold text-brand-600">{streamSource.name}</span> ({formatNumber(streamSource.rows || 0)} transactions).
+                  </>
+                ) : (
+                  <>
+                    The default stream replays <span className="mono">stream_test.csv</span>, the held-out test split. You can also upload custom CSV datasets below and replay them directly.
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -151,7 +161,7 @@ export default function Dataset() {
                 {uploading ? <Spinner className="h-4 w-4" /> : <Icon name="upload" className="h-4 w-4" />}
               </span>
               <span className="text-[13.5px] font-semibold text-ink-900">
-                {uploading ? 'Uploading...' : 'Choose a CSV file'}
+                {uploading ? 'Uploading and parsing dataset...' : 'Choose a CSV file'}
               </span>
               <span className="text-2xs text-ink-500">Up to {MAX_UPLOAD_MB} MB</span>
               <input
@@ -173,33 +183,48 @@ export default function Dataset() {
 
             {uploadResult ? (
               <div className="mt-3">
-                <Banner tone="success" title={`${uploadResult.name} stored`}>
-                  {formatNumber(uploadResult.rows)} rows, {formatBytes(uploadResult.size_bytes)}. Start
-                  a stream from it below.
+                <Banner tone="success" title={`${uploadResult.name} ready`}>
+                  Parsed {formatNumber(uploadResult.rows)} transactions ({formatBytes(uploadResult.size_bytes)}). Ready to stream live!
                 </Banner>
               </div>
             ) : null}
 
             {dataset && dataset.uploads && dataset.uploads.length ? (
-              <ul className="mt-4 divide-y divide-hairline border-t border-hairline">
-                {dataset.uploads.map((upload) => (
-                  <li key={upload.name} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="mono truncate text-ink-900">{upload.name}</p>
-                      <p className="text-2xs text-ink-500">{formatBytes(upload.size_bytes)}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-outline btn-sm"
-                      onClick={() => streamUploaded(upload.name)}
-                      disabled={busy}
-                    >
-                      <Icon name="play" className="h-3.5 w-3.5" />
-                      Stream this
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-4">
+                <p className="text-2xs font-semibold uppercase tracking-wider text-ink-400">Uploaded datasets</p>
+                <ul className="mt-2 divide-y divide-hairline border-t border-hairline">
+                  {dataset.uploads.map((upload) => {
+                    const isStreamingThis = isRunning && (streamSource.name === upload.name);
+                    return (
+                      <li key={upload.name} className="flex items-center justify-between gap-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="mono truncate text-ink-900 font-medium">{upload.name}</p>
+                          <p className="text-2xs text-ink-500">
+                            {formatNumber(upload.rows || 0)} rows • {formatBytes(upload.size_bytes || 0)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isStreamingThis ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-2xs font-medium text-emerald-700">
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                              Streaming
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={isStreamingThis ? "btn-danger btn-sm" : "btn-primary btn-sm"}
+                            onClick={() => isStreamingThis ? stopStream() : streamUploaded(upload.name)}
+                            disabled={busy}
+                          >
+                            <Icon name={isStreamingThis ? "stop" : "play"} className="h-3.5 w-3.5" />
+                            {isStreamingThis ? 'Stop' : 'Stream this'}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ) : null}
 
             <p className="mt-4 text-2xs leading-relaxed text-ink-500">
