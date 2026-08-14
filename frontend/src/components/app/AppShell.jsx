@@ -16,10 +16,63 @@ const NAV = [
   { to: '/app/dataset', label: 'Dataset & stream', icon: 'database' },
 ];
 
-function RealtimePill() {
-  const { realtimeStatus, engineOnline, lastUpdatedAt, error } = useStream();
+/**
+ * Shown whenever the dashboard is not talking to the detection engine.
+ *
+ * Every failed request is answered with locally generated data so the console
+ * stays usable, but those numbers never touched the model. Presenting them
+ * unlabelled makes a fraud dashboard state things it cannot support, so the
+ * substitution is called out until real contact resumes.
+ */
+function SimulationBanner() {
+  const { simulated, engineConnecting, engineError, lastEngineContactAt } = useStream();
 
-  const state = !engineOnline
+  if (!simulated && !engineConnecting) return null;
+
+  if (engineConnecting) {
+    return (
+      <div
+        className="flex items-center gap-2.5 border-b border-sky-200 bg-sky-50 px-4 py-2 text-[13px] text-sky-900 sm:px-6"
+        role="status"
+      >
+        <Icon name="activity" className="h-4 w-4 shrink-0 animate-pulse-dot" />
+        <span>
+          <span className="font-semibold">Connecting to the detection engine.</span>{' '}
+          A sleeping instance can take up to a minute to answer its first request.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-amber-300 bg-amber-50 px-4 py-2 text-[13px] text-amber-950 sm:px-6"
+      role="alert"
+    >
+      <Icon name="alert" className="h-4 w-4 shrink-0" />
+      <span>
+        <span className="font-semibold">Simulated data.</span> The detection engine is
+        unreachable, so these figures are generated in the browser and are not model
+        output.
+      </span>
+      {engineError ? (
+        <span className="text-2xs text-amber-800">({engineError})</span>
+      ) : null}
+      {lastEngineContactAt ? (
+        <span className="text-2xs text-amber-800">
+          last reached {formatRelative(lastEngineContactAt)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function RealtimePill() {
+  const { realtimeStatus, engineOnline, engineConnecting, lastUpdatedAt, error } = useStream();
+
+  const state = engineConnecting
+    ? { tone: 'bg-sky-500', label: 'Connecting' }
+    : !engineOnline
     ? { tone: 'bg-rose-500', label: 'Engine offline' }
     : realtimeStatus === 'connected'
       ? { tone: 'bg-emerald-500', label: 'Realtime live' }
@@ -206,6 +259,8 @@ export default function AppShell({ children }) {
           <RealtimePill />
           <StreamControls />
         </header>
+
+        <SimulationBanner />
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>

@@ -11,11 +11,68 @@ const baseURL = defaultBaseUrl;
 
 export const apiBaseUrl = baseURL;
 
+// A free-tier instance that has gone to sleep needs tens of seconds to answer
+// its first request. At the old 3s every cold start looked like a dead engine
+// and silently switched the dashboard onto simulated data.
+const REQUEST_TIMEOUT_MS = 10000;
+const HEALTH_TIMEOUT_MS = 45000;
+
 const client = axios.create({
   baseURL,
-  timeout: 3000,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
 });
+
+/**
+ * Whether calls are reaching the detection engine.
+ *
+ * Every request falls back to locally generated data when the engine cannot be
+ * reached, which keeps the dashboard usable but means the numbers on screen are
+ * no longer model output. Nothing could tell the two apart, so the UI could
+ * present invented fraud figures as real. This is the signal that lets it say so.
+ *
+ *   live: null   no request has completed yet (starting up / waking a cold host)
+ *   live: true   the last request reached the engine
+ *   live: false  the last request failed and simulated data was served instead
+ */
+const engineStatus = {
+  live: null,
+  lastError: null,
+  lastSuccessAt: null,
+  lastFailureAt: null,
+};
+
+const statusListeners = new Set();
+
+export function getEngineStatus() {
+  return { ...engineStatus };
+}
+
+export function subscribeEngineStatus(listener) {
+  statusListeners.add(listener);
+  return () => statusListeners.delete(listener);
+}
+
+function setEngineLive(live, error) {
+  const changed = engineStatus.live !== live;
+  engineStatus.live = live;
+  if (live) {
+    engineStatus.lastSuccessAt = new Date().toISOString();
+    engineStatus.lastError = null;
+  } else {
+    engineStatus.lastFailureAt = new Date().toISOString();
+    engineStatus.lastError = error ? error.message || String(error) : 'unreachable';
+  }
+  if (changed) {
+    statusListeners.forEach((listener) => {
+      try {
+        listener(getEngineStatus());
+      } catch (_listenerError) {
+        // A broken subscriber must not take down the polling loop.
+      }
+    });
+  }
+}
 
 client.interceptors.request.use(async (config) => {
   if (supabase) {
@@ -870,17 +927,22 @@ function getFallback(endpoint, params = {}) {
 async function request(promise, fallbackKey, params = {}) {
   try {
     const response = await promise;
+    setEngineLive(true, null);
     return response.data;
   } catch (error) {
-    if (fallbackKey) {
-      return getFallback(fallbackKey, params);
+    setEngineLive(false, error);
+    const fallback = getFallback(fallbackKey || 'metrics', params);
+    // Tag the payload so anything that inspects a response can tell that these
+    // numbers were generated locally rather than produced by the model.
+    if (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) {
+      fallback.simulated = true;
     }
-    return getFallback('metrics', params);
+    return fallback;
   }
 }
 
 export const api = {
-  health: () => request(client.get('/api/health'), 'health'),
+  health: () => request(client.get('/api/health', { timeout: HEALTH_TIMEOUT_MS }), 'health'),
   metrics: () => request(client.get('/api/metrics'), 'metrics'),
   streamStatus: () => request(client.get('/api/stream/status'), 'streamStatus'),
   startStream: (payload) =>

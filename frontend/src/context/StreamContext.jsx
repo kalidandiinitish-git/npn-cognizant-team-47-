@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import api from '../services/api';
+import api, { getEngineStatus, subscribeEngineStatus } from '../services/api';
 import { supabase } from '../lib/supabaseClient';
 import useInterval from '../hooks/useInterval';
 
@@ -45,6 +45,7 @@ export function StreamProvider({ children }) {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState(supabase ? 'connecting' : 'disabled');
   const [paused, setPaused] = useState(false);
+  const [engineStatus, setEngineStatus] = useState(getEngineStatus);
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -52,6 +53,14 @@ export function StreamProvider({ children }) {
     return () => {
       mounted.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    // Seed from the module, since requests may have resolved before mount.
+    setEngineStatus(getEngineStatus());
+    return subscribeEngineStatus((next) => {
+      if (mounted.current) setEngineStatus(next);
+    });
   }, []);
 
   const isRunning = Boolean(metrics && metrics.stream && metrics.stream.is_running);
@@ -340,7 +349,17 @@ export function StreamProvider({ children }) {
       isRunning,
       lastUpdatedAt,
       realtimeStatus,
-      engineOnline: Boolean((health && health.status === 'ok') || health || metrics),
+      // Reports whether requests are actually reaching the engine. The previous
+      // expression reduced to Boolean(health || metrics), and both are always
+      // set because failed requests are answered with locally generated data -
+      // so this could never be false, however dead the backend was.
+      engineOnline: engineStatus.live === true,
+      // Data on screen was generated in the browser, not produced by the model.
+      simulated: engineStatus.live === false,
+      // No request has completed yet: starting up, or waking a sleeping host.
+      engineConnecting: engineStatus.live === null,
+      engineError: engineStatus.lastError,
+      lastEngineContactAt: engineStatus.lastSuccessAt,
       totals: (metrics && metrics.totals) || null,
       latency: (metrics && metrics.latency) || null,
       riskDistribution: (metrics && metrics.risk_distribution) || [],
@@ -377,6 +396,7 @@ export function StreamProvider({ children }) {
       isRunning,
       lastUpdatedAt,
       realtimeStatus,
+      engineStatus,
       refreshCore,
       refreshReference,
       refreshInvestigations,
