@@ -120,12 +120,20 @@ export default function Dataset() {
           <div className="px-5 py-4">
             {dataset ? (
               <dl>
-                <DefinitionRow label="Training dataset" mono>
-                  {trainingDataset.name || 'creditcard.csv'}
+                {/* The engine reports whether the raw training file is on this
+                    host. It usually is not -- the repo ships the trained model,
+                    not the 150 MB CSV -- so naming a file and printing "0 B"
+                    reads as a broken dataset rather than an absent one. */}
+                <DefinitionRow label="Training dataset" mono={trainingDataset.exists}>
+                  {trainingDataset.exists
+                    ? trainingDataset.name
+                    : 'not on this host - model ships pre-trained'}
                 </DefinitionRow>
-                <DefinitionRow label="Size">
-                  {formatBytes(trainingDataset.size_bytes || 0)}
-                </DefinitionRow>
+                {trainingDataset.exists ? (
+                  <DefinitionRow label="Size">
+                    {formatBytes(trainingDataset.size_bytes || 0)}
+                  </DefinitionRow>
+                ) : null}
                 <DefinitionRow label="Stream source" mono>
                   {streamSource.name || 'stream_test.csv'}
                 </DefinitionRow>
