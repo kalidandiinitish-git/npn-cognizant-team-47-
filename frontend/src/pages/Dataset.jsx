@@ -11,7 +11,16 @@ import { formatBytes, formatCurrency, formatNumber, formatScore } from '../utils
 
 export default function Dataset() {
   useDocumentTitle('Dataset and stream');
-  const { dataset, health, streamStatus, refreshReference, startStream, busy } = useStream();
+  const {
+    dataset,
+    health,
+    streamStatus,
+    refreshReference,
+    startStream,
+    stopStream,
+    isRunning,
+    busy,
+  } = useStream();
 
   useEffect(() => {
     if (refreshReference) refreshReference();
