@@ -1,0 +1,65 @@
+# Render blueprint for the FraudStream AI detection engine.
+#
+# Render builds and starts from `rootDir`, so every relative path the engine
+# resolves (models/, data/) lines up with the local layout.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repository.
+# Values marked `sync: false` are NOT stored in git; Render prompts for them
+# on first deploy and keeps them in its own encrypted store.
+
+services:
+  - type: web
+    name: fraudstream-ai-engine
+    runtime: python
+    plan: free
+    region: singapore
+    rootDir: ml-engine
+    buildCommand: pip install -r requirements.txt
+    # A single worker is required, not a preference. The pseudo-stream runs on a
+    # background thread inside the process and keeps its counters in memory, so
+    # a second worker would run a second independent stream and split the state.
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # numpy 2.1.3 / xgboost 2.1.3 need 3.10+; pinned so a Render default bump
+      # cannot silently change the wheel set under the model.
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      # --- Supabase. Set these in the dashboard, never in the repo. ---
+      # Without them the engine cannot verify access tokens and, by design in
+      # src/api/auth.py, lets requests through. Configure all three before
+      # sharing the URL with anyone.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # --- Security ---
+      - key: REQUIRE_AUTH
+        value: "true"
+      # Exact Vercel origin, scheme included, no trailing slash.
+      # e.g. https://fraudstream-ai.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+
+      # --- Artifact locations, relative to rootDir ---
+      - key: MODEL_PATH
+        value: models/fraud_model.joblib
+      - key: PREPROCESSOR_PATH
+        value: models/preprocessor.joblib
+      - key: MODEL_METADATA_PATH
+        value: models/model_metadata.json
+      - key: STREAM_DATA_PATH
+        value: data/stream_test.csv
+
+      # --- Runtime behaviour ---
+      - key: STREAM_DELAY_MS
+        value: "120"
+      - key: PERSIST_BATCH_SIZE
+        value: "25"
+      - key: LOG_LEVEL
+        value: INFO

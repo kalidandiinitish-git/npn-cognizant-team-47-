@@ -1,0 +1,17 @@
+# Normalise text files, but never touch the runtime artifacts.
+* text=auto
+
+# Model artifacts are binary pickles. Git usually detects this from the NUL
+# bytes, but relying on content sniffing for the file the engine loads at
+# startup is not worth it: any line-ending conversion corrupts the model.
+*.joblib binary
+*.pkl binary
+
+# The held-out split is data, not source. Keep bytes identical across clones so
+# the stream replays the same rows on every platform.
+ml-engine/data/*.csv -text
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.svg text

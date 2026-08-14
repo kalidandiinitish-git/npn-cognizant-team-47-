@@ -36,6 +36,17 @@ ml-engine/models/*.joblib
 # Keep the metadata so reviewers can read the evaluation report without retraining.
 !ml-engine/models/model_metadata.json
 
+# Deployment needs the runtime artifacts in the repo. Render builds from a git
+# clone and the 150 MB training CSV is not there, so the engine cannot retrain
+# during a build. These three files are what it actually loads at startup:
+# the model (0.7 MB), the fitted preprocessor and the held-out split the
+# generator replays (13 MB). Committed deliberately, not by accident.
+!ml-engine/models/fraud_model.joblib
+!ml-engine/models/preprocessor.joblib
+!ml-engine/data/stream_test.csv
+!ml-engine/data/stream_fraud_index.json
+!ml-engine/data/dataset_profile.json
+
 # ---------- Editor / OS ----------
 .DS_Store
 Thumbs.db
