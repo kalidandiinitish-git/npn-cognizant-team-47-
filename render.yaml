@@ -28,9 +28,9 @@ services:
         value: 3.11.9
 
       # --- Supabase. Set these in the dashboard, never in the repo. ---
-      # Without them the engine cannot verify access tokens and, by design in
-      # src/api/auth.py, lets requests through. Configure all three before
-      # sharing the URL with anyone.
+      # Optional. Without them the engine keeps every counter in memory and
+      # persists nothing, which is all the public demo needs. Set all three
+      # (and flip REQUIRE_AUTH below) to run this as a real deployment.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -38,11 +38,19 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
 
-      # --- Security ---
+      # --- Access ---
+      # This service exists to be opened by anyone with the link, and visitors
+      # arrive with no Supabase session. "true" here means strict: the engine
+      # 503s when the Supabase keys above are absent, and 401s every route for a
+      # visitor holding no token, so the dashboard would show nothing but its
+      # simulated-data fallback. Set this to "true" only once the three keys
+      # above are configured and the dashboard signs users in.
       - key: REQUIRE_AUTH
-        value: "true"
-      # Exact Vercel origin, scheme included, no trailing slash.
-      # e.g. https://fraudstream-ai.vercel.app
+        value: "false"
+      # Exact browser origin of the dashboard, scheme included, no trailing
+      # slash, e.g. https://fraudstream-ai.vercel.app. Unset means the engine
+      # allows localhost only and every call from the deployed dashboard is
+      # blocked by the browser before it is ever sent.
       - key: CORS_ORIGINS
         sync: false
 
