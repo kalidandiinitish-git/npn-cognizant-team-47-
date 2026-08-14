@@ -6,6 +6,7 @@ import pytest
 
 from src.config import ALERT_RISK_SCORE, RISK_BANDS
 from src.risk.scoring import (
+    ACCOUNT_RISK_WEIGHTS,
     AccountRiskEngine,
     alert_type_for,
     assess,
@@ -97,6 +98,45 @@ def test_account_risk_aggregates_repeated_suspicion():
     assert 0.0 < profile.average_risk_score <= 1.0
     assert engine.high_risk_accounts()[0].account_id == account
     assert engine.count_by_level()["high"] + engine.count_by_level()["critical"] == 1
+
+
+def test_account_score_escalates_on_evidence_instead_of_a_flat_floor():
+    """A confirmed hit must rank, not collapse onto one value.
+
+    The earlier rule pinned every suspicious account to exactly the alert score.
+    That made the "high-risk accounts" table unsortable (identical scores), left
+    the critical band unreachable, and printed a number the page's own weight
+    breakdown could not reproduce.
+    """
+    engine = AccountRiskEngine()
+
+    # Whole history is fraud: nothing dilutes it, so it must reach critical.
+    only_fraud = engine.update("ACC-ALL", 1.0, 0.0, 0.999, True, "Amsterdam, NL", "Travel")
+    assert only_fraud.risk_score > 0.90
+    assert only_fraud.risk_level == "critical"
+
+    # Same single hit, but diluted by clean history: still escalated, ranked lower.
+    engine.update("ACC-MIXED", 20.0, 0.0, 0.01, False, "Berlin, DE", "Grocery")
+    engine.update("ACC-MIXED", 25.0, 60.0, 0.02, False, "Berlin, DE", "Grocery")
+    engine.update("ACC-MIXED", 30.0, 120.0, 0.01, False, "Berlin, DE", "Grocery")
+    mixed = engine.update("ACC-MIXED", 1.0, 180.0, 0.999, True, "Amsterdam, NL", "Travel")
+    assert mixed.risk_score >= ALERT_RISK_SCORE
+    assert mixed.risk_score < only_fraud.risk_score
+
+    # The two accounts carry the same worst transaction, so a flat floor would
+    # have made them indistinguishable.
+    assert only_fraud.maximum_risk_score == pytest.approx(mixed.maximum_risk_score)
+    assert only_fraud.risk_score != pytest.approx(mixed.risk_score)
+
+
+def test_clean_account_score_is_the_weighted_sum():
+    """Without a suspicious transaction the score is exactly the weighted sum."""
+    engine = AccountRiskEngine()
+    profile = engine.update("ACC-CLEAN", 10.0, 0.0, 0.20, False, "Berlin, DE", "Grocery")
+
+    signals = engine.signal_breakdown("ACC-CLEAN")
+    expected = sum(ACCOUNT_RISK_WEIGHTS[name] * value for name, value in signals.items())
+    assert profile.risk_score == pytest.approx(expected, abs=1e-4)
 
 
 def test_behavioural_features_use_prior_activity_only():

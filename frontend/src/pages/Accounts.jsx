@@ -8,9 +8,20 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 import { ACCOUNT_LEVEL_OPTIONS } from '../utils/constants';
 import { formatNumber, formatScore } from '../utils/format';
 
+/** Display copy per signal. The numbers come from the engine, never from here. */
+const SIGNAL_COPY = {
+  maximum_risk: { label: 'Maximum risk', description: 'The single worst transaction seen' },
+  average_risk: { label: 'Average risk', description: 'Mean transaction risk across the account' },
+  suspicious_ratio: { label: 'Suspicious ratio', description: 'Share of transactions that were flagged' },
+  velocity: { label: 'Velocity', description: 'Events inside a one hour window' },
+  high_value_ratio: { label: 'High value ratio', description: 'Share of transactions above 500' },
+  geo_anomaly: { label: 'Geographic spread', description: 'Distinct recent locations' },
+  merchant_anomaly: { label: 'Merchant anomaly', description: 'Repeated flags in one category' },
+};
+
 export default function Accounts() {
   useDocumentTitle('High-risk accounts');
-  const { accounts, totals, metrics } = useStream();
+  const { accounts, totals, metrics, accountWeights } = useStream();
 
   const [level, setLevel] = useState('all');
   const [query, setQuery] = useState('');
@@ -27,6 +38,15 @@ export default function Accounts() {
   }, [accounts, level, query]);
 
   const worst = accounts.length ? accounts[0] : null;
+
+  // Heaviest signal first, and only signals this build knows how to describe.
+  const weightRows = useMemo(
+    () =>
+      Object.entries(accountWeights || {})
+        .filter(([key]) => SIGNAL_COPY[key])
+        .sort((a, b) => b[1] - a[1]),
+    [accountWeights],
+  );
 
   return (
     <>
@@ -92,12 +112,14 @@ export default function Accounts() {
           <AccountTable accounts={filtered} />
 
           <div className="border-t border-hairline px-5 py-3 text-[12.5px] text-ink-500">
-            An account never scores below 0.70 once it produces a suspicious transaction, so a long
-            clean history cannot dilute a confirmed hit.
+            A suspicious transaction escalates its account to at least 0.70, then pushes it towards
+            the worst score seen as more of that account's history turns suspicious. A clean history
+            lowers the account without ever hiding a confirmed hit.
           </div>
         </Card>
       </div>
 
+      {weightRows.length ? (
       <div className="mt-4">
         <Card>
           <CardHeader
@@ -106,26 +128,21 @@ export default function Accounts() {
             icon="help"
           />
           <div className="grid gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ['Average risk', '0.30', 'Mean transaction risk across the account'],
-              ['Suspicious ratio', '0.20', 'Share of transactions that were flagged'],
-              ['Maximum risk', '0.15', 'The single worst transaction seen'],
-              ['Velocity', '0.10', 'Events inside a one hour window'],
-              ['High value ratio', '0.10', 'Share of transactions above 500'],
-              ['Geographic spread', '0.08', 'Distinct recent locations'],
-              ['Merchant anomaly', '0.07', 'Repeated flags in one category'],
-            ].map(([name, weight, description]) => (
-              <div key={name} className="bg-white px-4 py-3.5">
+            {weightRows.map(([key, weight]) => (
+              <div key={key} className="bg-white px-4 py-3.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-[13px] font-semibold text-ink-900">{name}</p>
-                  <span className="mono text-brand-600">{weight}</span>
+                  <p className="text-[13px] font-semibold text-ink-900">{SIGNAL_COPY[key].label}</p>
+                  <span className="mono text-brand-600">{weight.toFixed(2)}</span>
                 </div>
-                <p className="mt-1 text-2xs leading-relaxed text-ink-500">{description}</p>
+                <p className="mt-1 text-2xs leading-relaxed text-ink-500">
+                  {SIGNAL_COPY[key].description}
+                </p>
               </div>
             ))}
           </div>
         </Card>
       </div>
+      ) : null}
     </>
   );
 }

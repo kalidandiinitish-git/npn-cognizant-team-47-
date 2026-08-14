@@ -113,8 +113,11 @@ HIGH_VALUE_AMOUNT = 500.0
 
 #: Weighted combination used for the account risk score (PRD risk_engine.account_risk).
 ACCOUNT_RISK_WEIGHTS: Dict[str, float] = {
-    "average_risk": 0.30,
-    "maximum_risk": 0.15,
+    # The worst confirmed transaction leads: one transaction the model is sure
+    # about says more about an account than a mean that every legitimate
+    # transaction drags back down.
+    "maximum_risk": 0.30,
+    "average_risk": 0.15,
     "suspicious_ratio": 0.20,
     "velocity": 0.10,
     "high_value_ratio": 0.10,
@@ -339,10 +342,25 @@ class AccountRiskEngine:
         score = sum(ACCOUNT_RISK_WEIGHTS[name] * value for name, value in signals.items())
 
         # A single confirmed critical transaction should not be diluted away by a
-        # long clean history, so the account never scores below its worst hit
-        # once it has produced a suspicious transaction.
+        # long clean history, so a suspicious account is escalated on the evidence
+        # rather than the weighted average alone.
+        #
+        # The escalation is proportional to that evidence: how bad the worst
+        # transaction was, scaled by how much of the account's history it
+        # represents. A flat floor here (the earlier behaviour) put every flagged
+        # account on exactly the alert score, which erased the ranking the
+        # dashboard sorts by and left the critical band unreachable -- the three
+        # signals that actually evidence fraud carry 0.65 of the weight, so even
+        # an account whose every one of them is saturated could not pass 0.90.
+        # A flagged account starts at the alert score and climbs towards its worst
+        # transaction as more of its history turns suspicious: one fraud in one
+        # transaction is the whole account, one in forty is a single compromised
+        # card. That spreads flagged accounts across the high and critical bands
+        # in a ranked order instead of stacking them on a single value.
         if profile.suspicious_count:
-            score = max(score, 0.70)
+            worst = _clamp(profile.maximum_risk_score, ALERT_RISK_SCORE, 1.0)
+            concentration = profile.suspicious_count / count
+            score = max(score, ALERT_RISK_SCORE + (worst - ALERT_RISK_SCORE) * concentration)
         return round(_clamp(score, 0.0, 1.0), 6)
 
     def signal_breakdown(self, account_id: str) -> Dict[str, float]:

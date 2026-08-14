@@ -35,6 +35,7 @@ export function StreamProvider({ children }) {
   const [transactions, setTransactions] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [accountWeights, setAccountWeights] = useState(null);
   const [investigations, setInvestigations] = useState([]);
   const [investigationMetrics, setInvestigationMetrics] = useState(null);
   const [model, setModel] = useState(null);
@@ -78,6 +79,9 @@ export function StreamProvider({ children }) {
       setTransactions(feed.transactions || []);
       setAlerts(alertPayload.alerts || []);
       setAccounts(accountPayload.accounts || []);
+      // Served by the engine so the "how this is calculated" panel cannot drift
+      // away from the weighting actually in force.
+      if (accountPayload.weights) setAccountWeights(accountPayload.weights);
       setError(null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (requestError) {
@@ -343,6 +347,7 @@ export function StreamProvider({ children }) {
       transactions,
       alerts,
       accounts,
+      accountWeights,
       investigations,
       investigationMetrics,
       model,
@@ -391,6 +396,7 @@ export function StreamProvider({ children }) {
       transactions,
       alerts,
       accounts,
+      accountWeights,
       investigations,
       investigationMetrics,
       model,
