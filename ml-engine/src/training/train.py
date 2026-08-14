@@ -371,10 +371,15 @@ def run_training(
             for result in results
         ],
         "selection": {
+            # Describes what select_best actually does. "Preferably" used to
+            # appear here, which read as a soft preference and left the table
+            # unable to explain its own outcome: random_forest has the best
+            # PR-AUC and clears the 50 ms target, yet loses on the headroom gate.
             "criteria": (
-                f"p95 single-transaction latency must stay under {LATENCY_TARGET_MS:.0f} ms "
-                f"and preferably under {COMFORTABLE_LATENCY_MS:.0f} ms (2x headroom); "
-                "among those candidates the best PR-AUC wins"
+                f"p95 single-transaction latency must stay under {LATENCY_TARGET_MS:.0f} ms; "
+                f"candidates keeping 2x headroom (p95 under {COMFORTABLE_LATENCY_MS:.0f} ms) "
+                "are then the only ones considered, and among those the best PR-AUC wins. "
+                "The headroom gate is relaxed only if no candidate clears it"
             ),
             "latency_target_ms": LATENCY_TARGET_MS,
             "comfortable_latency_ms": COMFORTABLE_LATENCY_MS,

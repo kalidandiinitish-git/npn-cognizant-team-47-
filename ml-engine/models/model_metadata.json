@@ -773,7 +773,7 @@
     }
   ],
   "selection": {
-    "criteria": "p95 single-transaction latency must stay under 50 ms and preferably under 25 ms (2x headroom); among those candidates the best PR-AUC wins",
+    "criteria": "p95 single-transaction latency must stay under 50 ms; candidates keeping 2x headroom (p95 under 25 ms) are then the only ones considered, and among those the best PR-AUC wins. The headroom gate is relaxed only if no candidate clears it",
     "latency_target_ms": 50.0,
     "comfortable_latency_ms": 25.0,
     "selected": "xgboost"
