@@ -15,7 +15,11 @@ export const apiBaseUrl = baseURL;
 // its first request. At the old 3s every cold start looked like a dead engine
 // and silently switched the dashboard onto simulated data.
 const REQUEST_TIMEOUT_MS = 10000;
-const HEALTH_TIMEOUT_MS = 45000;
+// Render's free plan stops the instance after 15 minutes idle and a cold boot
+// here (pandas, scikit-learn, xgboost, then the model artifacts) runs past the
+// old 45s, so health has to outwait the boot or the very first request of the
+// day reports a healthy engine as dead.
+const HEALTH_TIMEOUT_MS = 90000;
 
 const client = axios.create({
   baseURL,
@@ -42,6 +46,27 @@ const engineStatus = {
   lastFailureAt: null,
 };
 
+//: A free-tier host that has gone to sleep answers nothing until it has booted,
+//: which takes longer than any single request is willing to wait. Every call
+//: made during that window times out, and reporting the first one as "engine
+//: unreachable" would replace the "still waking" banner with the simulated-data
+//: warning while the engine is in fact on its way up. Timeouts are therefore
+//: held as "not answered yet" until the host has had a realistic boot's worth of
+//: time to respond. After that a failure is a failure and must be shown as one.
+const COLD_START_GRACE_MS = 90_000;
+let firstAttemptAt = null;
+
+function looksLikeHostAsleep(error) {
+  if (!error) return false;
+  // Axios: timeout -> ECONNABORTED/ETIMEDOUT; unreachable host -> no response.
+  return (
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ETIMEDOUT' ||
+    error.code === 'ERR_NETWORK' ||
+    !error.response
+  );
+}
+
 const statusListeners = new Set();
 
 export function getEngineStatus() {
@@ -54,8 +79,18 @@ export function subscribeEngineStatus(listener) {
 }
 
 function setEngineLive(live, error) {
-  const changed = engineStatus.live !== live;
-  engineStatus.live = live;
+  if (firstAttemptAt === null) firstAttemptAt = Date.now();
+
+  // Hold "waking" rather than declaring the engine unreachable while a cold host
+  // still has boot time left, so the first visitor is not shown fabricated
+  // numbers for a host that is simply starting.
+  let nextLive = live;
+  if (!live && engineStatus.lastSuccessAt === null && looksLikeHostAsleep(error)) {
+    if (Date.now() - firstAttemptAt < COLD_START_GRACE_MS) nextLive = null;
+  }
+
+  const changed = engineStatus.live !== nextLive;
+  engineStatus.live = nextLive;
   if (live) {
     engineStatus.lastSuccessAt = new Date().toISOString();
     engineStatus.lastError = null;
