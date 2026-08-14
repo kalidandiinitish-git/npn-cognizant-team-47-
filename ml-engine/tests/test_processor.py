@@ -198,6 +198,94 @@ def test_persisted_payload_only_carries_schema_columns(
     assert payload["behaviour"] == row["behaviour"]
 
 
+def test_live_quality_reports_zero_precision_rather_than_nothing(stub_predictor, stub_writer):
+    """A precision of 0.0 is a measured result, not an absent one."""
+    processor = build_processor(stub_predictor, stub_writer)
+    state = processor.state
+
+    # One flagged transaction that was actually legitimate: precision is 0.0,
+    # recall is undefined (no positives exist), so F1 cannot be computed.
+    state.record_transaction(
+        row={}, latency_ms=1.0, risk_level="critical", flagged=True, label=0
+    )
+    quality = state.live_quality()
+    assert quality["precision"] == 0.0, "0.0 must survive, not collapse to None"
+    assert quality["recall"] is None
+
+    # Add a missed fraud: recall becomes 0.0 too, so F1 is a real 0.0.
+    state.record_transaction(
+        row={}, latency_ms=1.0, risk_level="low", flagged=False, label=1
+    )
+    quality = state.live_quality()
+    assert quality["precision"] == 0.0
+    assert quality["recall"] == 0.0
+    assert quality["f1_score"] == 0.0, "F1 of a model getting everything wrong is 0, not unknown"
+
+
+def test_live_quality_leaves_unmeasured_values_none(stub_predictor, stub_writer):
+    """Nothing scored yet means genuinely unknown, which stays None."""
+    processor = build_processor(stub_predictor, stub_writer)
+    quality = processor.state.live_quality()
+    assert quality["precision"] is None
+    assert quality["recall"] is None
+    assert quality["f1_score"] is None
+
+
+class CountingWriter:
+    """An enabled writer that reports cumulative totals, like the real one."""
+
+    enabled = True
+
+    def __init__(self) -> None:
+        self.succeeded = 0
+        self.failed = 0
+
+    def write_transaction(self, _payload) -> None:
+        self.succeeded += 1
+
+    def write_alert(self, _payload) -> None:
+        self.succeeded += 1
+
+    def write_investigation_case(self, _payload) -> None:
+        self.succeeded += 1
+
+    def write_account_risk(self, _payload) -> None:
+        self.failed += 1  # stand-in for a rejected row
+
+    def stats(self):
+        return {"enabled": True, "queued": 0, "succeeded": self.succeeded, "failed": self.failed}
+
+    def flush(self, timeout: float = 0.0) -> None:
+        return None
+
+    def close(self, timeout: float = 0.0) -> None:
+        return None
+
+
+def test_persistence_counters_report_real_writer_activity(sample_csv: Path, stub_predictor):
+    """The run-scoped counters were hard-wired to zero and never moved."""
+    writer = CountingWriter()
+    processor = StreamProcessor(predictor=stub_predictor, writer=writer)
+
+    processor.start(source=str(sample_csv), limit=6, delay_ms=0, persist=True)
+    if processor._thread is not None:
+        processor._thread.join(timeout=15)
+
+    status = processor.status()
+    assert status["persisted"] == writer.succeeded > 0
+    assert status["persist_failures"] == writer.failed
+
+    # A second run reports only its own share, not the cumulative total.
+    before = writer.succeeded
+    processor.start(source=str(sample_csv), limit=3, delay_ms=0, persist=True)
+    if processor._thread is not None:
+        processor._thread.join(timeout=15)
+
+    second = processor.status()
+    assert second["persisted"] == writer.succeeded - before
+    assert second["persisted"] < writer.succeeded, "counters must be per run, not cumulative"
+
+
 def test_counters_reset_between_runs(sample_csv: Path, stub_predictor, stub_writer):
     processor = build_processor(stub_predictor, stub_writer)
     for event in transaction_stream(sample_csv, limit=5):

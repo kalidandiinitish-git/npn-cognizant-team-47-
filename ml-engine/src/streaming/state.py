@@ -130,10 +130,16 @@ class StreamState:
         with self._lock:
             self.invalid_records += 1
 
-    def record_persistence(self, succeeded: int, failed: int = 0) -> None:
+    def set_persistence(self, succeeded: int, failed: int = 0) -> None:
+        """Publish how much of *this run* reached Supabase.
+
+        Absolute rather than incremental: the writer already keeps cumulative
+        totals across runs, and the processor reports the delta since the run
+        began, so counting here as well would double count.
+        """
         with self._lock:
-            self.persisted += succeeded
-            self.persist_failures += failed
+            self.persisted = max(int(succeeded), 0)
+            self.persist_failures = max(int(failed), 0)
 
     def record_transaction(
         self,
@@ -239,11 +245,15 @@ class StreamState:
             )
         precision = tp / (tp + fp) if (tp + fp) else None
         recall = tp / (tp + fn) if (tp + fn) else None
-        f1 = (
-            2 * precision * recall / (precision + recall)
-            if precision and recall and (precision + recall)
-            else None
-        )
+        # Guard on None, not truthiness: a precision of exactly 0.0 is a
+        # measured result (every flag was wrong), and reporting it as "not
+        # measured yet" hides the worst case the dashboard exists to show.
+        if precision is None or recall is None:
+            f1 = None
+        elif precision + recall == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * precision * recall / (precision + recall)
         return {
             "true_positives": tp,
             "false_positives": fp,

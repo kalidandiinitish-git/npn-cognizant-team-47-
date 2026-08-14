@@ -75,6 +75,8 @@ class StreamProcessor:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._source_rows = 0
+        #: (succeeded, failed) on the writer when the current run started.
+        self._persist_baseline = (0, 0)
 
     # -- dependencies --------------------------------------------------------
 
@@ -181,6 +183,8 @@ class StreamProcessor:
                 self.investigations.reset()
 
             self._stop_event.clear()
+            if self.writer.enabled:
+                self._persist_baseline = (self.writer.succeeded, self.writer.failed)
             self.state.begin(config)
             self._thread = threading.Thread(
                 target=self._run, args=(config,), name="pseudo-stream", daemon=True
@@ -200,7 +204,21 @@ class StreamProcessor:
             self.state.finish(StreamStatus.IDLE)
         return {"stopped": True, **self.status()}
 
+    def _sync_persistence_counters(self) -> None:
+        """Refresh the run's persistence counters from the writer.
+
+        The writer is the only component that knows what actually reached
+        Postgres, and its totals are cumulative across runs, so the run-scoped
+        figures are the delta since this run began.
+        """
+        if not self.writer.enabled:
+            return
+        succeeded, failed = self.writer.succeeded, self.writer.failed
+        base_succeeded, base_failed = self._persist_baseline
+        self.state.set_persistence(succeeded - base_succeeded, failed - base_failed)
+
     def status(self) -> Dict[str, Any]:
+        self._sync_persistence_counters()
         snapshot = self.state.status_snapshot()
         snapshot["is_running"] = self.is_running
         snapshot["source_total_rows"] = self._source_rows
@@ -245,9 +263,8 @@ class StreamProcessor:
         finally:
             if self.writer.enabled:
                 self.writer.flush(timeout=5.0)
-                stats = self.writer.stats()
-                self.state.record_persistence(0, 0)
-                logger.info("Supabase writer stats: %s", stats)
+                self._sync_persistence_counters()
+                logger.info("Supabase writer stats: %s", self.writer.stats())
 
     # -- single transaction pipeline -----------------------------------------
 
