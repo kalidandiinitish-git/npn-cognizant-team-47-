@@ -95,9 +95,17 @@ def health() -> HealthResponse:
     except ModelNotTrainedError as error:
         detail = str(error)
 
+    if settings.auth_misconfigured:
+        # Surfaced on the one public route so a broken deployment is visible
+        # without shell access to the logs.
+        detail = (
+            "REQUIRE_AUTH is enabled but Supabase credentials are missing; "
+            "protected routes are refusing requests."
+        )
+
     dataset = settings.resolve_dataset_path()
     return HealthResponse(
-        status="ok" if model_loaded else "degraded",
+        status="ok" if model_loaded and not settings.auth_misconfigured else "degraded",
         version=__version__,
         model_loaded=model_loaded,
         model_name=model_name,
@@ -635,7 +643,13 @@ def on_startup() -> None:
     ensure_directories()
     logger.info("FraudStream AI engine %s starting", __version__)
     logger.info("CORS origins: %s", settings.cors_origins)
-    if not settings.auth_enabled:
+    if settings.auth_misconfigured:
+        logger.error(
+            "REQUIRE_AUTH is enabled but SUPABASE_URL / SUPABASE_ANON_KEY are missing. "
+            "Protected routes will return 503 until they are set. This instance is NOT "
+            "serving the dashboard."
+        )
+    elif not settings.auth_enabled:
         logger.warning("Authentication is NOT enforced on this instance.")
     try:
         predictor = get_predictor()

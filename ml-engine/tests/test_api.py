@@ -213,6 +213,38 @@ def test_dataset_info_reports_measured_values_not_placeholders(client, tmp_path,
     assert api_main._count_stream_rows(missing) == 1
 
 
+def test_explicit_require_auth_without_credentials_fails_closed(client, monkeypatch):
+    """REQUIRE_AUTH=true with no Supabase keys used to serve everything openly."""
+    monkeypatch.setattr(settings, "require_auth", True)
+    monkeypatch.setattr(settings, "require_auth_explicit", True)
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_anon_key", "")
+
+    assert settings.auth_misconfigured is True
+
+    protected = client.get("/api/metrics")
+    assert protected.status_code == 503
+    assert "REQUIRE_AUTH" in protected.json()["detail"]
+
+    # Health stays public so the platform health check still reports, but it
+    # must say the instance is degraded rather than claim everything is fine.
+    health = client.get("/api/health").json()
+    assert health["status"] == "degraded"
+    assert "REQUIRE_AUTH" in health["detail"]
+
+
+def test_unset_require_auth_stays_permissive_for_local_development(client, monkeypatch):
+    """An unset flag is a developer who has not configured Supabase, not an
+    operator asking for a locked-down service."""
+    monkeypatch.setattr(settings, "require_auth", True)
+    monkeypatch.setattr(settings, "require_auth_explicit", False)
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_anon_key", "")
+
+    assert settings.auth_misconfigured is False
+    assert client.get("/api/metrics").status_code == 200
+
+
 def test_alert_status_update_requires_a_known_alert(client):
     response = client.patch("/api/alerts/TXN-does-not-exist", json={"status": "resolved"})
     assert response.status_code == 404

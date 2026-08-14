@@ -117,8 +117,10 @@ and the API surface.
   `authenticated` role. Only the status column on `fraud_alerts` is writable, via
   a column-level grant.
 - The FastAPI service verifies the caller's Supabase access token on every route
-  except `/api/health`. With `REQUIRE_AUTH=true` and Supabase configured, an
-  unauthenticated request is rejected.
+  except `/api/health`. With `REQUIRE_AUTH=true` an unauthenticated request is
+  rejected, and if the Supabase keys are missing the service refuses protected
+  routes with 503 instead of failing open. Leaving `REQUIRE_AUTH` unset keeps the
+  permissive local-development behaviour.
 - `VITE_DEMO_MODE` bypasses login for local development only. It is off by
   default and must stay off anywhere reachable from the internet.
 - CORS is restricted to the origins listed in `CORS_ORIGINS`.

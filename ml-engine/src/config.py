@@ -205,6 +205,13 @@ class Settings:
         ]
     )
     require_auth: bool = field(default_factory=lambda: _env_bool("REQUIRE_AUTH", True))
+    #: Whether REQUIRE_AUTH was set at all. "Unset" and "true" must be told
+    #: apart: unset is a developer who has not thought about it and gets the
+    #: permissive local default, while an explicit true is an operator asking
+    #: for authentication, which must never silently degrade to open access.
+    require_auth_explicit: bool = field(
+        default_factory=lambda: bool(os.getenv("REQUIRE_AUTH", "").strip())
+    )
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())
 
     #: How many recent records the in-memory buffers keep for the API fallback.
@@ -215,9 +222,30 @@ class Settings:
         return bool(self.supabase_url and self.supabase_service_role_key)
 
     @property
+    def _auth_credentials_present(self) -> bool:
+        return bool(self.supabase_url and self.supabase_anon_key)
+
+    @property
     def auth_enabled(self) -> bool:
         """Auth can only be enforced when Supabase Auth is reachable."""
-        return bool(self.require_auth and self.supabase_url and self.supabase_anon_key)
+        return bool(self.require_auth and self._auth_credentials_present)
+
+    @property
+    def auth_misconfigured(self) -> bool:
+        """Authentication was explicitly demanded but cannot be performed.
+
+        Deploying with REQUIRE_AUTH=true and no Supabase keys used to serve
+        every route unauthenticated: the flag that was supposed to lock the
+        service down was exactly what got ignored. render.yaml sets this flag
+        while leaving the keys to be filled in by hand, so the gap is one
+        forgotten dashboard field wide. The API refuses to serve protected
+        routes in that state rather than failing open.
+        """
+        return bool(
+            self.require_auth
+            and self.require_auth_explicit
+            and not self._auth_credentials_present
+        )
 
     def resolve_dataset_path(self) -> Optional[Path]:
         """Locate the historical dataset, honouring DATA_PATH when provided."""

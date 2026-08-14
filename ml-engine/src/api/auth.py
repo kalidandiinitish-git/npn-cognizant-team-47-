@@ -53,9 +53,9 @@ def _warn_once() -> None:
             )
         else:
             logger.warning(
-                "REQUIRE_AUTH is true but SUPABASE_URL / SUPABASE_ANON_KEY are missing, "
-                "so tokens cannot be verified and requests are being allowed through. "
-                "Configure Supabase before exposing this service."
+                "SUPABASE_URL / SUPABASE_ANON_KEY are missing, so tokens cannot be "
+                "verified and requests are being allowed through. Set REQUIRE_AUTH "
+                "explicitly to make this instance refuse unauthenticated traffic."
             )
 
 
@@ -95,6 +95,19 @@ async def require_user(
     authorization: Optional[str] = Header(default=None),
 ) -> AuthenticatedUser:
     """FastAPI dependency enforcing a valid Supabase session."""
+    if settings.auth_misconfigured:
+        # Fail closed. REQUIRE_AUTH was set deliberately, so letting the request
+        # through because the credentials are missing would defeat the one
+        # setting that was meant to protect this service.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "REQUIRE_AUTH is enabled but SUPABASE_URL / SUPABASE_ANON_KEY are "
+                "not configured, so sessions cannot be verified. Set them, or set "
+                "REQUIRE_AUTH=false to run this instance unauthenticated on purpose."
+            ),
+        )
+
     if not settings.auth_enabled:
         _warn_once()
         return DEV_USER
