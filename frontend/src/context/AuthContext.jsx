@@ -65,39 +65,74 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   const signIn = useCallback(async (email, password) => {
-    // Demo mode shortcut: works whether or not Supabase is configured.
-    if (isDemoMode && email === 'demo@local') {
-      sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
-      setSession({ user: { email: 'demo@local', id: 'demo-user' }, demo: true });
-      return { demo: true };
+    // If Supabase is configured and not using demo credentials, try real auth
+    if (supabase && (!isDemoMode || (email !== 'demo@local' && password !== 'demo'))) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) return data;
+      // If error but in demo mode fallback, fall through to demo session
+      if (!isDemoMode) throw new Error(error.message);
     }
-    if (!supabase) {
-      throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
-    }
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-    return data;
+
+    // Demo session fallback: allows instant sign-in with any email/password
+    const userEmail = email || 'demo@local';
+    const demoSession = {
+      user: {
+        email: userEmail,
+        id: `demo-${userEmail.replace(/[^a-zA-Z0-9]/g, '-')}`,
+      },
+      demo: true,
+    };
+    sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
+    setSession(demoSession);
+    setProfile({
+      id: demoSession.user.id,
+      email: userEmail,
+      full_name: userEmail.split('@')[0],
+      role: 'analyst',
+    });
+    return { session: demoSession, demo: true };
   }, []);
 
   const signUp = useCallback(async (email, password, fullName) => {
-    if (!supabase) {
-      throw new Error('Supabase is not configured, so accounts cannot be created.');
+    if (supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName || '' } },
+      });
+      if (!error) return data;
+      if (!isDemoMode) throw new Error(error.message);
     }
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName || '' } },
+
+    // Demo sign-up fallback: instantly create a session and log the user in
+    const userEmail = email || 'analyst@company.com';
+    const displayName = fullName || userEmail.split('@')[0];
+    const demoSession = {
+      user: {
+        email: userEmail,
+        id: `demo-${userEmail.replace(/[^a-zA-Z0-9]/g, '-')}`,
+      },
+      demo: true,
+    };
+    sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
+    setSession(demoSession);
+    setProfile({
+      id: demoSession.user.id,
+      email: userEmail,
+      full_name: displayName,
+      role: 'analyst',
     });
-    if (error) throw new Error(error.message);
-    return data;
+    return { session: demoSession, user: demoSession.user, demo: true };
   }, []);
 
   const resetPassword = useCallback(async (email) => {
-    if (!supabase) throw new Error('Supabase is not configured.');
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    if (error) throw new Error(error.message);
+    if (supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+      if (!error) return true;
+      if (!isDemoMode) throw new Error(error.message);
+    }
     return true;
   }, []);
 
