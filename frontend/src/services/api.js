@@ -3,9 +3,15 @@ import { supabase } from '../lib/supabaseClient';
 import { MODEL_METADATA } from '../data/modelMetadata';
 import { DATASET_PROFILE } from '../data/datasetProfile';
 
+// Live Render deployment of ml-engine (render.yaml). This is only the fallback
+// for a build with no VITE_API_URL — when it goes stale every production call
+// fails and the dashboard silently switches to the fabricated data in
+// getFallback(), so it has to point at a host that actually answers.
+const PRODUCTION_ENGINE_URL = 'https://fraudstream-ai-engine-0t6q.onrender.com';
+
 const defaultBaseUrl =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? 'https://npn-cognizant-team-47.onrender.com' : 'http://localhost:8000');
+  (import.meta.env.PROD ? PRODUCTION_ENGINE_URL : 'http://localhost:8000');
 
 const baseURL = defaultBaseUrl;
 
