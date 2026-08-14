@@ -102,8 +102,6 @@ export function StreamProvider({ children }) {
     }
   }, []);
 
-  const pollCounter = useRef(0);
-
   const refreshReference = useCallback(async () => {
     try {
       const nextHealth = await api.health();
@@ -154,6 +152,14 @@ export function StreamProvider({ children }) {
   );
 
   // ---- Supabase Realtime -------------------------------------------------
+  // Read through a ref rather than a dependency: the handlers only consult
+  // `paused` when an event arrives, so depending on it would tear down and
+  // rebuild the whole channel on every toggle, dropping events across the gap.
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
   useEffect(() => {
     if (!supabase) return undefined;
 
@@ -163,7 +169,7 @@ export function StreamProvider({ children }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'transactions' },
         (payload) => {
-          if (paused) return;
+          if (pausedRef.current) return;
           setTransactions((current) =>
             mergeById(current, [payload.new], 'transaction_ref', FEED_LIMIT),
           );
@@ -174,7 +180,7 @@ export function StreamProvider({ children }) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'fraud_alerts' },
         (payload) => {
-          if (paused) return;
+          if (pausedRef.current) return;
           setAlerts((current) => mergeById(current, [payload.new], 'transaction_id', 80));
         },
       )
@@ -182,7 +188,7 @@ export function StreamProvider({ children }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'account_risk' },
         (payload) => {
-          if (paused || !payload.new) return;
+          if (pausedRef.current || !payload.new) return;
           setAccounts((current) => {
             const next = current.filter((row) => row.account_id !== payload.new.account_id);
             next.push(payload.new);
@@ -196,14 +202,14 @@ export function StreamProvider({ children }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'investigation_cases' },
         () => {
-          if (!paused) refreshInvestigations();
+          if (!pausedRef.current) refreshInvestigations();
         },
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'investigation_notes' },
         () => {
-          if (!paused) refreshInvestigations();
+          if (!pausedRef.current) refreshInvestigations();
         },
       )
       .subscribe((status) => {
@@ -216,7 +222,7 @@ export function StreamProvider({ children }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [paused, refreshInvestigations]);
+  }, [refreshInvestigations]);
 
   // ---- Actions -----------------------------------------------------------
   const startStream = useCallback(

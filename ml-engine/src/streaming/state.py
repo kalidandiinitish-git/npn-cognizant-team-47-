@@ -347,7 +347,11 @@ class StreamState:
 
 
 def _percentile(ordered_samples: List[float], percentile: float) -> float:
-    """Nearest-rank percentile on an already sorted list."""
+    """Linearly interpolated percentile on an already sorted list.
+
+    This is the same definition numpy uses by default, so the latency figures
+    the dashboard shows and the ones the training report records are comparable.
+    """
     if not ordered_samples:
         return 0.0
     if len(ordered_samples) == 1:
