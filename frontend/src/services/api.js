@@ -214,25 +214,35 @@ function getFallback(endpoint, params = {}) {
   }
 
   if (endpoint === 'metrics') {
+    const tps = mockStreamRunning ? 8.4 : 0;
+    const fraudRate = +(100.0 * mockAlertsCount / Math.max(1, mockProcessed)).toFixed(2);
+    const criticalCount = Math.max(1, Math.floor(mockAlertsCount * 0.6));
     return {
       stream: {
         is_running: mockStreamRunning,
         processed: mockProcessed,
         alerts_raised: mockAlertsCount,
-        transactions_per_second: mockStreamRunning ? 8.4 : 0,
+        transactions_per_second: tps,
         elapsed_seconds: mockStreamRunning ? 24.5 : 0,
         source_total_rows: 42560,
       },
       totals: {
         total_transactions: mockProcessed,
-        flagged: mockAlertsCount,
-        fraud_ratio: +(mockAlertsCount / Math.max(1, mockProcessed)).toFixed(4),
+        fraud_transactions: mockAlertsCount,
+        fraud_detection_rate: fraudRate,
+        critical_alerts: criticalCount,
+        alerts_raised: mockAlertsCount,
+        invalid_records: 0,
+        high_risk_accounts: 4,
+        monitored_accounts: 28,
+        transactions_per_second: tps,
       },
       latency: {
         average_ms: 0.97,
         p95_ms: 1.59,
         p99_ms: 1.93,
         target_ms: 50.0,
+        within_target: true,
       },
       risk_distribution: [
         { level: 'low', count: Math.max(0, mockProcessed - 25), percentage: 84.5 },
@@ -266,6 +276,10 @@ function getFallback(endpoint, params = {}) {
   }
 
   if (endpoint === 'recentTransactions') {
+    if (mockStreamRunning) {
+      const fresh = generateInitialTransactions().slice(0, 2);
+      mockTransactionsList = [...fresh, ...mockTransactionsList].slice(0, 80);
+    }
     return { count: mockTransactionsList.length, transactions: mockTransactionsList };
   }
 
