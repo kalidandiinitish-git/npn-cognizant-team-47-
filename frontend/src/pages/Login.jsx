@@ -30,6 +30,7 @@ export default function Login() {
     signIn,
     signUp,
     resetPassword,
+    enterDemoMode,
     supabaseConfigured,
     demoModeAvailable,
     isAuthenticated,
@@ -95,7 +96,8 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
-      await signIn('demo@local', 'demo');
+      // Explicitly a demo session, not a sign-in that happens to succeed.
+      enterDemoMode();
       history.replace(redirectTo);
     } catch (demoError) {
       if (mounted.current) setError(demoError.message);
@@ -137,7 +139,7 @@ export default function Login() {
                 : 'Access the live monitor, fraud alerts and model analytics.'}
           </p>
 
-          {!supabaseConfigured ? (
+          {!supabaseConfigured && demoModeAvailable ? (
             <div className="mt-5 rounded-xl border border-brand-200/80 bg-brand-50/60 p-4">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-600">
@@ -321,7 +323,7 @@ export default function Login() {
             Detection console
           </p>
           <h2 className="mt-4 max-w-sm text-[30px] font-semibold leading-tight tracking-tightest text-white">
-            The stream is already running. Come and watch it.
+            Start the stream and watch every transaction get scored.
           </h2>
         </div>
 

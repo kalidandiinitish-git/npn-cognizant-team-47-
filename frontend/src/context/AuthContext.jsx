@@ -92,16 +92,15 @@ export function AuthProvider({ children }) {
     };
   }, [session]);
 
-  const signIn = useCallback(async (email, password) => {
-    // If Supabase is configured and not using demo credentials, try real auth
-    if (supabase && (!isDemoMode || (email !== 'demo@local' && password !== 'demo'))) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (!error) return data;
-      // If error but in demo mode fallback, fall through to demo session
-      if (!isDemoMode) throw new Error(error.message);
-    }
-
-    // Demo session fallback: allows instant sign-in with any email/password
+  /**
+   * Start a local demo session.
+   *
+   * Deliberately separate from signIn. Entering the demo is a choice the
+   * visitor makes with the demo button; it must never be the consolation prize
+   * for credentials that failed, or the console would report a successful
+   * sign-in to someone who typed the wrong password.
+   */
+  const startDemoSession = useCallback((email, fullName) => {
     const userEmail = email || 'demo@local';
     const demoSession = {
       user: {
@@ -116,53 +115,63 @@ export function AuthProvider({ children }) {
     setProfile({
       id: demoSession.user.id,
       email: userEmail,
-      full_name: userEmail.split('@')[0],
-      role: 'analyst',
-    });
-    return { session: demoSession, demo: true };
-  }, []);
-
-  const signUp = useCallback(async (email, password, fullName) => {
-    if (supabase) {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName || '' } },
-      });
-      if (!error) return data;
-      if (!isDemoMode) throw new Error(error.message);
-    }
-
-    // Demo sign-up fallback: instantly create a session and log the user in
-    const userEmail = email || 'analyst@company.com';
-    const displayName = fullName || userEmail.split('@')[0];
-    const demoSession = {
-      user: {
-        email: userEmail,
-        id: `demo-${userEmail.replace(/[^a-zA-Z0-9]/g, '-')}`,
-      },
-      demo: true,
-    };
-    localStorage.setItem(DEMO_STORAGE_KEY, 'active');
-    sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
-    setSession(demoSession);
-    setProfile({
-      id: demoSession.user.id,
-      email: userEmail,
-      full_name: displayName,
+      full_name: fullName || userEmail.split('@')[0],
       role: 'analyst',
     });
     return { session: demoSession, user: demoSession.user, demo: true };
   }, []);
 
-  const resetPassword = useCallback(async (email) => {
-    if (supabase) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
-      });
-      if (!error) return true;
-      if (!isDemoMode) throw new Error(error.message);
+  const enterDemoMode = useCallback(() => {
+    if (!isDemoMode) {
+      throw new Error('Demo mode is disabled on this deployment.');
     }
+    return startDemoSession('demo@local', 'Demo Analyst');
+  }, [startDemoSession]);
+
+  const signIn = useCallback(
+    async (email, password) => {
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw new Error(error.message);
+        return data;
+      }
+      // No Supabase project to authenticate against. The demo session is the
+      // only thing sign-in can mean here, rather than a silent downgrade.
+      if (!isDemoMode) {
+        throw new Error('Authentication is not configured on this deployment.');
+      }
+      return startDemoSession(email, null);
+    },
+    [startDemoSession],
+  );
+
+  const signUp = useCallback(
+    async (email, password, fullName) => {
+      if (supabase) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: fullName || '' } },
+        });
+        if (error) throw new Error(error.message);
+        return data;
+      }
+      if (!isDemoMode) {
+        throw new Error('Account creation is not configured on this deployment.');
+      }
+      return startDemoSession(email, fullName);
+    },
+    [startDemoSession],
+  );
+
+  const resetPassword = useCallback(async (email) => {
+    if (!supabase) {
+      throw new Error('Password reset needs Supabase, which is not configured here.');
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    if (error) throw new Error(error.message);
     return true;
   }, []);
 
@@ -201,8 +210,9 @@ export function AuthProvider({ children }) {
       signUp,
       signOut,
       resetPassword,
+      enterDemoMode,
     };
-  }, [session, profile, loading, signIn, signUp, signOut, resetPassword]);
+  }, [session, profile, loading, signIn, signUp, signOut, resetPassword, enterDemoMode]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
