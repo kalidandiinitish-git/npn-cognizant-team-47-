@@ -46,6 +46,11 @@ class TransactionEvent:
     identity: Dict[str, object]
     ingested_at: str
     label: Optional[int] = None
+    #: 1-based line of the source CSV this event came from. Stable across runs,
+    #: unlike ``transaction_id``, so replays of the same file stay traceable.
+    source_row: int = 0
+    #: Identifier of the stream run that emitted this event, when one was given.
+    run_id: Optional[str] = None
 
     def model_record(self) -> Dict[str, float]:
         """The payload handed to the model (never includes the label)."""
@@ -55,6 +60,8 @@ class TransactionEvent:
         payload: Dict[str, object] = {
             "transaction_id": self.transaction_id,
             "sequence": self.sequence,
+            "source_row": self.source_row,
+            "run_id": self.run_id,
             "event_time": self.event_time,
             "transaction_time": self.transaction_time,
             "amount": self.amount,
@@ -112,6 +119,7 @@ def transaction_stream(
     skip: int = 0,
     should_continue: Optional[Callable[[], bool]] = None,
     on_invalid: Optional[Callable[[int, str], None]] = None,
+    run_id: Optional[str] = None,
 ) -> Iterator[TransactionEvent]:
     """Yield transactions one at a time from ``source``.
 
@@ -123,6 +131,12 @@ def transaction_stream(
         should_continue: polled before every event; return ``False`` to stop the
             stream cleanly mid-file.
         on_invalid: called with (row_number, reason) for each rejected record.
+        run_id: mixed into every transaction id so ids stay unique across runs
+            and across source files. Row position alone is not unique: replaying
+            the same file, or streaming a different one, restarts the count at 1
+            and collides with rows already written to ``transactions``, whose
+            ``transaction_ref`` column is UNIQUE. Left out, ids keep the plain
+            row-numbered form, which keeps direct library use deterministic.
 
     Yields:
         :class:`TransactionEvent` - exactly one per iteration.
@@ -163,7 +177,9 @@ def transaction_stream(
 
             emitted += 1
             event = TransactionEvent(
-                transaction_id=f"TXN-{row_number:07d}",
+                transaction_id=(
+                    f"TXN-{run_id}-{row_number:07d}" if run_id else f"TXN-{row_number:07d}"
+                ),
                 sequence=emitted,
                 event_time=event_time,
                 transaction_time=_event_timestamp(event_time),
@@ -172,6 +188,8 @@ def transaction_stream(
                 identity=derive_identity(features),
                 ingested_at=datetime.now(timezone.utc).isoformat(),
                 label=label,
+                source_row=row_number,
+                run_id=run_id,
             )
 
             if delay_seconds:

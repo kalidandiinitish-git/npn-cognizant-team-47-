@@ -98,6 +98,40 @@ def test_skip_offsets_the_stream(sample_csv: Path):
     assert without_skip[0].transaction_id != with_skip[0].transaction_id
 
 
+def test_run_id_makes_ids_unique_across_runs_and_files(sample_csv: Path, tmp_path: Path):
+    """Row position alone repeats; the run id is what keeps ids unique."""
+    plain_a = [event.transaction_id for event in transaction_stream(sample_csv, limit=3)]
+    plain_b = [event.transaction_id for event in transaction_stream(sample_csv, limit=3)]
+    assert plain_a == plain_b, "without a run id, ids are purely positional"
+
+    tagged_a = [
+        event.transaction_id for event in transaction_stream(sample_csv, limit=3, run_id="AAA111")
+    ]
+    tagged_b = [
+        event.transaction_id for event in transaction_stream(sample_csv, limit=3, run_id="BBB222")
+    ]
+    assert not set(tagged_a) & set(tagged_b)
+    assert all(ref.startswith("TXN-AAA111-") for ref in tagged_a)
+
+    # A different file restarts row numbering, so it must not collide either.
+    other = tmp_path / "other.csv"
+    other.write_text(sample_csv.read_text(encoding="utf-8"), encoding="utf-8")
+    tagged_other = [
+        event.transaction_id for event in transaction_stream(other, limit=3, run_id="CCC333")
+    ]
+    assert not set(tagged_other) & (set(tagged_a) | set(tagged_b))
+
+
+def test_events_record_their_source_row(sample_csv: Path):
+    """source_row is the CSV line, so it survives the id changing per run."""
+    events = list(transaction_stream(sample_csv, limit=4, run_id="RUN001"))
+    assert [event.source_row for event in events] == [1, 2, 3, 4]
+    assert all(event.run_id == "RUN001" for event in events)
+    # Row 5 is malformed, so sequence and source row diverge past it.
+    later = list(transaction_stream(sample_csv, limit=6, run_id="RUN001"))[-1]
+    assert later.sequence == 6 and later.source_row == 7
+
+
 def test_validate_record_rejects_bad_input():
     with pytest.raises(InvalidTransactionError):
         validate_record({"Amount": "10"})  # no Time

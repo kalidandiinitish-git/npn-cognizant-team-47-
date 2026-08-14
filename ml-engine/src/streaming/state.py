@@ -39,6 +39,9 @@ class StreamConfig:
     delay_ms: int = 0
     skip: int = 0
     persist: bool = True
+    #: Short identifier for this run, mixed into every transaction id so ids
+    #: stay unique across restarts and across source files.
+    run_id: str = ""
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -47,6 +50,7 @@ class StreamConfig:
             "delay_ms": self.delay_ms,
             "skip": self.skip,
             "persist": self.persist,
+            "run_id": self.run_id,
         }
 
 

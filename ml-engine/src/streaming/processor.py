@@ -30,6 +30,33 @@ from .state import StreamConfig, StreamState, StreamStatus
 
 logger = logging.getLogger(__name__)
 
+#: Columns of ``public.transactions`` (supabase/migrations/0001_init.sql). Only
+#: these are sent to Supabase; ``id`` and ``created_at`` have defaults but the
+#: engine supplies ``created_at`` itself so the row keeps its ingestion time.
+TRANSACTION_COLUMNS = (
+    "transaction_ref",
+    "sequence",
+    "account_id",
+    "card_last4",
+    "transaction_amount",
+    "merchant",
+    "merchant_category",
+    "location",
+    "channel",
+    "transaction_time",
+    "model_score",
+    "risk_score",
+    "risk_level",
+    "decision",
+    "is_fraud",
+    "inference_latency_ms",
+    "processing_latency_ms",
+    "actual_label",
+    "account_risk_level",
+    "behaviour",
+    "created_at",
+)
+
 
 class StreamProcessor:
     """Owns the stream lifecycle, the risk state and the persistence handoff."""
@@ -142,6 +169,7 @@ class StreamProcessor:
                 delay_ms=settings.stream_delay_ms if delay_ms is None else max(int(delay_ms), 0),
                 skip=max(int(skip), 0),
                 persist=bool(persist),
+                run_id=uuid4().hex[:6].upper(),
             )
 
             if reset:
@@ -197,6 +225,7 @@ class StreamProcessor:
                 skip=config.skip,
                 should_continue=lambda: not self._stop_event.is_set(),
                 on_invalid=lambda _row, _reason: self.state.record_invalid(),
+                run_id=config.run_id,
             )
             for event in stream:
                 self.process_event(event, persist=config.persist)
@@ -334,6 +363,8 @@ class StreamProcessor:
         return {
             "transaction_ref": event.transaction_id,
             "sequence": event.sequence,
+            "source_row": event.source_row,
+            "run_id": event.run_id,
             "account_id": identity.get("account_id"),
             "card_last4": identity.get("card_last4"),
             "transaction_amount": round(event.amount, 2),
@@ -374,10 +405,18 @@ class StreamProcessor:
 
     @staticmethod
     def _persistable_transaction(row: Dict[str, Any]) -> Dict[str, Any]:
-        """Drop UI-only fields that have no column in Supabase."""
-        payload = {key: value for key, value in row.items() if key != "behaviour"}
-        payload["behaviour"] = row.get("behaviour")  # stored as jsonb
-        return payload
+        """Project a scored row onto the columns ``public.transactions`` has.
+
+        An allowlist rather than a denylist: PostgREST rejects the whole insert
+        when a payload carries an unknown column, and inserts are batched, so a
+        single stray key silently costs every row in its batch. Adding a field
+        for the dashboard must never be able to break persistence.
+        """
+        return {
+            column: row.get(column)
+            for column in TRANSACTION_COLUMNS
+            if column in row
+        }
 
     @staticmethod
     def _persistable_alert(alert: Dict[str, Any]) -> Dict[str, Any]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.streaming.generator import transaction_stream
-from src.streaming.processor import StreamProcessor
+from src.streaming.processor import TRANSACTION_COLUMNS, StreamProcessor
 from src.streaming.state import StreamStatus
 
 
@@ -131,6 +131,71 @@ def test_background_stream_start_and_stop(sample_csv: Path, stub_predictor, stub
     stopped = processor.stop()
     assert stopped["stopped"] is True
     assert processor.is_running is False
+
+
+def test_transaction_refs_never_repeat_across_runs(
+    sample_csv: Path, stub_predictor, stub_writer
+):
+    """transactions.transaction_ref is UNIQUE, so a replay must not reuse ids.
+
+    Row position restarts at 1 on every run. Without a per-run discriminator the
+    second run collides with rows already stored, and because inserts are
+    batched one duplicate rejects its whole batch - persistence dies silently
+    while the in-memory dashboard keeps looking healthy.
+    """
+    processor = build_processor(stub_predictor, stub_writer)
+
+    def run_once() -> set:
+        processor.start(source=str(sample_csv), limit=8, delay_ms=0, persist=False)
+        if processor._thread is not None:
+            processor._thread.join(timeout=15)
+        return {row["transaction_ref"] for row in processor.state.recent_transactions(limit=50)}
+
+    first = run_once()
+    second = run_once()
+
+    assert len(first) == 8 and len(second) == 8, "each run must emit 8 distinct refs"
+    assert not (first & second), f"refs reused across runs: {sorted(first & second)}"
+
+
+def test_source_row_stays_stable_while_refs_differ(
+    sample_csv: Path, stub_predictor, stub_writer
+):
+    """The run id is what changes; the source row keeps replays traceable."""
+    processor = build_processor(stub_predictor, stub_writer)
+
+    def first_row() -> dict:
+        processor.start(source=str(sample_csv), limit=3, delay_ms=0, persist=False)
+        if processor._thread is not None:
+            processor._thread.join(timeout=15)
+        rows = processor.state.recent_transactions(limit=50)
+        return sorted(rows, key=lambda item: item["sequence"])[0]
+
+    one, two = first_row(), first_row()
+
+    assert one["source_row"] == two["source_row"], "same CSV line, same source row"
+    assert one["transaction_ref"] != two["transaction_ref"]
+    assert one["run_id"] and one["run_id"] != two["run_id"]
+
+
+def test_persisted_payload_only_carries_schema_columns(
+    sample_csv: Path, stub_predictor, stub_writer
+):
+    """PostgREST rejects the whole insert on an unknown column, so the payload
+    is projected onto the columns 0001_init.sql actually declares."""
+    processor = build_processor(stub_predictor, stub_writer)
+    event = next(transaction_stream(sample_csv, run_id="ABC123"))
+    row = processor.process_event(event, persist=False)
+
+    payload = processor._persistable_transaction(row)
+
+    assert set(payload) <= set(TRANSACTION_COLUMNS)
+    # Dashboard-only fields must be dropped rather than sent to Postgres.
+    assert "source_row" in row and "source_row" not in payload
+    assert "run_id" in row and "run_id" not in payload
+    # ...while everything the table does declare still gets through.
+    assert payload["transaction_ref"] == row["transaction_ref"]
+    assert payload["behaviour"] == row["behaviour"]
 
 
 def test_counters_reset_between_runs(sample_csv: Path, stub_predictor, stub_writer):
