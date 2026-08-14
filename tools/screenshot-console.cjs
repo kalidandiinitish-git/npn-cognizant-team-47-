@@ -68,8 +68,8 @@ async function seedStream() {
     if (response.status() === 404) notFound.add(response.url());
   });
 
-  await page.goto(`${appUrl}/login`, { waitUntil: 'networkidle' });
-  const demoButton = page.locator('button', { hasText: 'Continue without Supabase' });
+  await page.goto(`${appUrl}/login`, { waitUntil: 'domcontentloaded' });
+  const demoButton = page.locator('button', { hasText: /Continue without Supabase|Continue with Demo Mode|Enter Console/i }).first();
   if (!(await demoButton.count())) {
     console.log('FAILED: demo button not present - was the build made with VITE_DEMO_MODE=true?');
     await browser.close();
@@ -89,7 +89,7 @@ async function seedStream() {
   ];
 
   for (const target of pages) {
-    await page.goto(appUrl + target.url, { waitUntil: 'networkidle' });
+    await page.goto(appUrl + target.url, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1400);
     const file = path.join(outDir, target.name + '.png');
     await page.screenshot({ path: file });

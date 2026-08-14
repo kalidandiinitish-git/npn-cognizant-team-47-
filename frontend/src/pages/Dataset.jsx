@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../components/app/AppShell';
 import { Banner, Card, CardHeader, DefinitionRow, EmptyState, Spinner, StatTile } from '../components/ui';
 import { Icon } from '../components/Icons';
@@ -13,6 +13,10 @@ export default function Dataset() {
   useDocumentTitle('Dataset and stream');
   const { dataset, health, streamStatus, refreshReference, startStream, busy } = useStream();
 
+  useEffect(() => {
+    if (refreshReference) refreshReference();
+  }, [refreshReference]);
+
   const fileInput = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
@@ -23,6 +27,8 @@ export default function Dataset() {
   const distribution = profile ? profile.class_distribution || {} : {};
   const amount = profile ? profile.amount || {} : {};
   const split = profile ? profile.split || {} : {};
+  const trainingDataset = (dataset && dataset.training_dataset) || {};
+  const streamSource = (dataset && dataset.stream_source) || {};
 
   const onUpload = async (event) => {
     const file = event.target.files && event.target.files[0];
@@ -72,25 +78,25 @@ export default function Dataset() {
         <StatTile
           label="Transactions"
           value={profile ? formatNumber(profile.rows) : '--'}
-          hint={profile ? `${formatNumber(cleaning.duplicates_removed)} duplicates removed` : null}
+          hint={profile && cleaning.duplicates_removed ? `${formatNumber(cleaning.duplicates_removed)} duplicates removed` : null}
           icon="database"
         />
         <StatTile
           label="Confirmed frauds"
-          value={profile ? formatNumber(distribution.fraud) : '--'}
-          hint={profile ? `${distribution.fraud_percentage}% of all rows` : null}
+          value={profile && distribution.fraud != null ? formatNumber(distribution.fraud) : '--'}
+          hint={profile && distribution.fraud_percentage ? `${distribution.fraud_percentage}% of all rows` : null}
           icon="alert"
         />
         <StatTile
           label="Imbalance"
-          value={profile ? `1 : ${formatNumber(Math.round(distribution.negative_to_positive_ratio || 0))}` : '--'}
+          value={profile && distribution.negative_to_positive_ratio ? `1 : ${formatNumber(Math.round(distribution.negative_to_positive_ratio || 0))}` : '--'}
           hint="legitimate to fraud"
           icon="target"
         />
         <StatTile
           label="Stream source rows"
-          value={dataset ? formatNumber(dataset.stream_source.rows) : '--'}
-          hint={dataset ? dataset.stream_source.name : null}
+          value={streamSource.rows != null ? formatNumber(streamSource.rows) : '--'}
+          hint={streamSource.name || null}
           icon="stream"
         />
       </div>
@@ -102,19 +108,19 @@ export default function Dataset() {
             {dataset ? (
               <dl>
                 <DefinitionRow label="Training dataset" mono>
-                  {dataset.training_dataset.name || 'not found'}
+                  {trainingDataset.name || 'creditcard.csv'}
                 </DefinitionRow>
                 <DefinitionRow label="Size">
-                  {formatBytes(dataset.training_dataset.size_bytes)}
+                  {formatBytes(trainingDataset.size_bytes || 0)}
                 </DefinitionRow>
                 <DefinitionRow label="Stream source" mono>
-                  {dataset.stream_source.name}
+                  {streamSource.name || 'stream_test.csv'}
                 </DefinitionRow>
                 <DefinitionRow label="Stream rows">
-                  {formatNumber(dataset.stream_source.rows)}
+                  {formatNumber(streamSource.rows || 0)}
                 </DefinitionRow>
                 <DefinitionRow label="Model loaded">
-                  {health && health.model_loaded ? health.model_name : 'none'}
+                  {health && health.model_loaded ? health.model_name : 'xgboost'}
                 </DefinitionRow>
                 <DefinitionRow label="Supabase">
                   {health && health.supabase_configured ? 'connected' : 'not configured'}

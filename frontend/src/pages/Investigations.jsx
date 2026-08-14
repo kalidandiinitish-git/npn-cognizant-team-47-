@@ -458,7 +458,32 @@ export default function Investigations() {
   );
 
   const metrics = investigationMetrics || {};
-  const activeCount = Number(metrics.open || 0) + Number(metrics.investigating || 0);
+  const activeCount = useMemo(
+    () => investigations.filter((item) => ['open', 'investigating'].includes(item.status)).length,
+    [investigations],
+  );
+  const unassignedCount = useMemo(
+    () => investigations.filter((item) => !item.assignee && ['open', 'investigating'].includes(item.status)).length,
+    [investigations],
+  );
+  const confirmedCount = useMemo(
+    () =>
+      investigations.filter(
+        (item) =>
+          item.resolution_code === 'confirmed_fraud' ||
+          (item.status === 'resolved' && item.resolution_code !== 'false_positive' && item.resolution_code !== 'dismissed'),
+      ).length,
+    [investigations],
+  );
+  const resolvedCount = useMemo(
+    () => investigations.filter((item) => item.status === 'resolved').length,
+    [investigations],
+  );
+  const dismissedCount = useMemo(
+    () => investigations.filter((item) => item.status === 'dismissed').length,
+    [investigations],
+  );
+
   const analyst = user || { id: 'local-dev', email: email || 'local@dev' };
 
   const openCase = (id) => history.push(`/app/investigations?case=${encodeURIComponent(id)}`);
@@ -477,8 +502,8 @@ export default function Investigations() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Active cases" value={formatNumber(activeCount)} hint="open and investigating" icon="shield" tone={activeCount ? 'alert' : 'default'} />
-        <StatTile label="Unassigned" value={formatNumber(metrics.unassigned || 0)} hint="awaiting ownership" icon="users" />
-        <StatTile label="Confirmed fraud" value={formatNumber(metrics.confirmed_fraud || 0)} hint="analyst outcomes" icon="check" />
+        <StatTile label="Unassigned" value={formatNumber(unassignedCount)} hint="awaiting ownership" icon="users" />
+        <StatTile label="Confirmed fraud" value={formatNumber(confirmedCount)} hint="analyst outcomes" icon="check" />
         <StatTile
           label="Mean resolution"
           value={metrics.average_resolution_seconds === null || metrics.average_resolution_seconds === undefined ? '--' : formatDuration(metrics.average_resolution_seconds)}
@@ -497,8 +522,8 @@ export default function Investigations() {
               items={[
                 { value: 'active', label: 'Active', count: activeCount },
                 { value: 'all', label: 'All', count: investigations.length },
-                { value: 'resolved', label: 'Resolved', count: metrics.resolved || 0 },
-                { value: 'dismissed', label: 'Dismissed', count: metrics.dismissed || 0 },
+                { value: 'resolved', label: 'Resolved', count: resolvedCount },
+                { value: 'dismissed', label: 'Dismissed', count: dismissedCount },
               ]}
             />
             <Tabs
@@ -513,7 +538,7 @@ export default function Investigations() {
             />
           </div>
 
-          {initialising ? (
+          {initialising && !investigations.length ? (
             <div className="flex items-center justify-center gap-2 px-6 py-14 text-[13.5px] text-ink-500"><Spinner /> Loading cases</div>
           ) : filtered.length ? (
             <TableShell>

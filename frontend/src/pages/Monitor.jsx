@@ -71,7 +71,17 @@ export default function Monitor() {
           label="Throughput"
           value={totals ? totals.transactions_per_second : '--'}
           unit="tx/s"
-          hint={streamStatus ? `${formatNumber(streamStatus.invalid_records)} invalid records skipped` : null}
+          hint={
+            streamStatus || totals
+              ? `${formatNumber(
+                  (streamStatus && streamStatus.invalid_records != null)
+                    ? streamStatus.invalid_records
+                    : (totals && totals.invalid_records != null)
+                      ? totals.invalid_records
+                      : 0,
+                )} invalid records skipped`
+              : null
+          }
           icon="bolt"
         />
         <StatTile

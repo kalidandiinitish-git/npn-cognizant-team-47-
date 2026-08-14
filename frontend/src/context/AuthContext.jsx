@@ -14,10 +14,25 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let active = true;
 
-    if (!supabase) {
-      if (isDemoMode && sessionStorage.getItem(DEMO_STORAGE_KEY) === 'active') {
+    const restoreDemoSession = () => {
+      const isStored =
+        localStorage.getItem(DEMO_STORAGE_KEY) === 'active' ||
+        sessionStorage.getItem(DEMO_STORAGE_KEY) === 'active';
+      if (isDemoMode && isStored) {
         setSession({ user: { email: 'demo@local', id: 'demo-user' }, demo: true });
+        setProfile({
+          id: 'demo-user',
+          email: 'demo@local',
+          full_name: 'Demo Analyst',
+          role: 'analyst',
+        });
+        return true;
       }
+      return false;
+    };
+
+    if (!supabase) {
+      restoreDemoSession();
       setLoading(false);
       return undefined;
     }
@@ -26,14 +41,27 @@ export function AuthProvider({ children }) {
       .getSession()
       .then(({ data }) => {
         if (!active) return;
-        setSession(data.session || null);
+        if (data && data.session) {
+          setSession(data.session);
+        } else {
+          const restored = restoreDemoSession();
+          if (!restored) setSession(null);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        restoreDemoSession();
       })
       .finally(() => {
         if (active) setLoading(false);
       });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession || null);
+      if (nextSession) {
+        setSession(nextSession);
+      } else if (!restoreDemoSession()) {
+        setSession(null);
+      }
     });
 
     return () => {
@@ -47,8 +75,8 @@ export function AuthProvider({ children }) {
   // ---- Profile row (created by the on_auth_user_created trigger) ---------
   useEffect(() => {
     let active = true;
-    if (!supabase || !session || !session.user) {
-      setProfile(null);
+    if (!supabase || !session || !session.user || session.demo) {
+      if (!session || !session.user) setProfile(null);
       return undefined;
     }
     supabase
@@ -82,6 +110,7 @@ export function AuthProvider({ children }) {
       },
       demo: true,
     };
+    localStorage.setItem(DEMO_STORAGE_KEY, 'active');
     sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
     setSession(demoSession);
     setProfile({
@@ -114,6 +143,7 @@ export function AuthProvider({ children }) {
       },
       demo: true,
     };
+    localStorage.setItem(DEMO_STORAGE_KEY, 'active');
     sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
     setSession(demoSession);
     setProfile({
@@ -137,9 +167,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    localStorage.removeItem(DEMO_STORAGE_KEY);
     sessionStorage.removeItem(DEMO_STORAGE_KEY);
     if (supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (_error) {
+        // ignore network error on sign-out
+      }
     }
     setSession(null);
     setProfile(null);

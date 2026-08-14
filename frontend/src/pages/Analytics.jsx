@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { PageHeader } from '../components/app/AppShell';
 import { Banner, Card, CardHeader, DefinitionRow, EmptyState, StatTile } from '../components/ui';
 import {
@@ -14,7 +14,13 @@ import { formatDateTime, formatMs, formatNumber, formatScore, titleCase } from '
 
 export default function Analytics() {
   useDocumentTitle('Model analytics');
-  const { model, latency, liveQuality } = useStream();
+  const { model, latency, liveQuality, refreshReference } = useStream();
+
+  useEffect(() => {
+    if (refreshReference && !model) {
+      refreshReference();
+    }
+  }, [refreshReference, model]);
 
   if (!model) {
     return (

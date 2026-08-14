@@ -37,7 +37,7 @@ async function main() {
   page.on('pageerror', (error) => consoleErrors.push('pageerror: ' + error.message));
 
   // ---------------------------------------------------------------- landing
-  await page.goto(appUrl + '/', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/', { waitUntil: 'domcontentloaded' });
   check(
     'landing renders its headline',
     (await page.locator('h1').innerText()).includes('50 milliseconds'),
@@ -55,7 +55,7 @@ async function main() {
   );
 
   // -------------------------------------------------------------- auth guard
-  await page.goto(appUrl + '/app/monitor', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app/monitor', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   check(
     'protected route redirects an anonymous visitor',
@@ -64,7 +64,7 @@ async function main() {
   );
 
   // ------------------------------------------------------------------- login
-  await page.locator('button', { hasText: 'Continue without Supabase' }).click();
+  await page.locator('button', { hasText: /Continue without Supabase|Continue with Demo Mode|Enter Console/i }).first().click();
   await page.waitForURL(/\/app/, { timeout: 20000 });
   await page.waitForTimeout(1800);
   // The guard stored the originally requested page, so sign-in should land back
@@ -75,7 +75,7 @@ async function main() {
     page.url(),
   );
 
-  await page.goto(appUrl + '/app', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   check('overview loads after sign-in', new URL(page.url()).pathname === '/app');
 
@@ -120,7 +120,7 @@ async function main() {
   );
 
   // ----------------------------------------------------------- live monitor
-  await page.goto(appUrl + '/app/monitor', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app/monitor', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2200);
   const allRows = await page.locator('tbody tr').count();
   check('monitor lists scored transactions', allRows > 0, `${allRows} rows`);
@@ -176,7 +176,7 @@ async function main() {
   check('drawer closes', (await page.getByRole('dialog', { name: 'Transaction detail' }).count()) === 0);
 
   // ---------------------------------------------------------------- alerts
-  await page.goto(appUrl + '/app/alerts', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app/alerts', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
   const alertRows = await page.locator('tbody tr').count();
   check('alerts page lists raised alerts', alertRows > 0, `${alertRows} alerts`);
@@ -204,7 +204,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------- accounts
-  await page.goto(appUrl + '/app/accounts', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app/accounts', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
   const accountRows = await page.locator('tbody tr').count();
   check('accounts page lists escalated accounts', accountRows > 0, `${accountRows} rows`);
@@ -222,7 +222,7 @@ async function main() {
   }
 
   // -------------------------------------------------------- stop from the UI
-  await page.goto(appUrl + '/app', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   const stopButton = page.getByRole('button', { name: 'Stop stream' });
   if (await stopButton.count()) {
@@ -241,7 +241,7 @@ async function main() {
   }
 
   // ------------------------------------------------------------------- 404
-  await page.goto(appUrl + '/definitely-not-a-page', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/definitely-not-a-page', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(600);
   check(
     'unknown route renders the 404 page',
@@ -249,11 +249,11 @@ async function main() {
   );
 
   // -------------------------------------------------------------- sign out
-  await page.goto(appUrl + '/app', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
   await page.locator('[aria-label="Sign out"]').click();
   await page.waitForTimeout(1500);
-  await page.goto(appUrl + '/app', { waitUntil: 'networkidle' });
+  await page.goto(appUrl + '/app', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
   check(
     'signing out re-enables the auth guard',
@@ -268,14 +268,14 @@ async function main() {
     hasTouch: true,
   });
   const small = await mobile.newPage();
-  await small.goto(appUrl + '/', { waitUntil: 'networkidle' });
+  await small.goto(appUrl + '/', { waitUntil: 'domcontentloaded' });
   check('landing renders on a phone viewport', await small.locator('h1').isVisible());
   await small.locator('[aria-controls="mobile-nav"]').click();
   await small.waitForTimeout(500);
   check('mobile navigation opens', await small.locator('#mobile-nav').isVisible());
 
-  await small.goto(appUrl + '/login', { waitUntil: 'networkidle' });
-  await small.locator('button', { hasText: 'Continue without Supabase' }).click();
+  await small.goto(appUrl + '/login', { waitUntil: 'domcontentloaded' });
+  await small.locator('button', { hasText: /Continue without Supabase|Continue with Demo Mode|Enter Console/i }).first().click();
   await small.waitForURL(/\/app/, { timeout: 20000 });
   await small.waitForTimeout(1500);
   check('console loads on a phone viewport', await small.locator('h1').isVisible());

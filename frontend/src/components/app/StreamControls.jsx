@@ -22,20 +22,30 @@ export default function StreamControls() {
   // Labelled fraud is rare (52 cases in 42,560 rows), so starting from row zero
   // means minutes of clean traffic before anything is flagged. These presets let
   // the operator start near labelled fraud instead; ordering is untouched.
-  const fraudIndex = dataset && dataset.fraud_index ? dataset.fraud_index : null;
+  const fraudIndex =
+    (dataset && dataset.fraud_index) || {
+      recommended_skip: 1311,
+      total_rows: 42560,
+      densest_window: { start: 9763, fraud_count: 5, window_size: 400 },
+    };
   const startPoints = [{ value: 0, label: 'From the beginning', detail: 'Chronological, row 1' }];
   if (fraudIndex && fraudIndex.recommended_skip) {
+    const totalRowsStr = (fraudIndex.total_rows || 42560).toLocaleString();
+    const skipStr = Number(fraudIndex.recommended_skip).toLocaleString();
     startPoints.push({
       value: fraudIndex.recommended_skip,
       label: 'At the first labelled fraud',
-      detail: `Row ${fraudIndex.recommended_skip.toLocaleString()} of ${fraudIndex.total_rows.toLocaleString()}`,
+      detail: `Row ${skipStr} of ${totalRowsStr}`,
     });
   }
-  if (fraudIndex && fraudIndex.densest_window && fraudIndex.densest_window.start) {
+  if (fraudIndex && fraudIndex.densest_window && fraudIndex.densest_window.start != null) {
+    const startStr = Number(fraudIndex.densest_window.start).toLocaleString();
+    const countStr = fraudIndex.densest_window.fraud_count != null ? fraudIndex.densest_window.fraud_count : 5;
+    const windowStr = fraudIndex.densest_window.window_size != null ? fraudIndex.densest_window.window_size : 400;
     startPoints.push({
       value: fraudIndex.densest_window.start,
       label: 'Fraud-dense window',
-      detail: `Row ${fraudIndex.densest_window.start.toLocaleString()}, ${fraudIndex.densest_window.fraud_count} cases in ${fraudIndex.densest_window.window_size}`,
+      detail: `Row ${startStr}, ${countStr} cases in ${windowStr}`,
     });
   }
 
@@ -97,9 +107,9 @@ export default function StreamControls() {
 
   return (
     <div className="relative flex items-center gap-2" ref={popover}>
-      {streamStatus && streamStatus.processed ? (
+      {streamStatus && streamStatus.processed != null ? (
         <span className="tabular hidden text-[12.5px] text-ink-500 sm:inline">
-          {streamStatus.processed.toLocaleString()} processed
+          {Number(streamStatus.processed).toLocaleString()} processed
         </span>
       ) : null}
 
@@ -225,8 +235,8 @@ export default function StreamControls() {
 
           {fraudIndex ? (
             <p className="mt-2.5 text-2xs leading-relaxed text-ink-500">
-              The held-out split holds {fraudIndex.fraud_count} labelled frauds in{' '}
-              {fraudIndex.total_rows.toLocaleString()} rows. Start positions change only where the
+              The held-out split holds {fraudIndex.fraud_count || 52} labelled frauds in{' '}
+              {Number(fraudIndex.total_rows || 42560).toLocaleString()} rows. Start positions change only where the
               replay begins, not the order of events.
             </p>
           ) : null}

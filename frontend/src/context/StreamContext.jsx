@@ -93,33 +93,37 @@ export function StreamProvider({ children }) {
     }
   }, []);
 
+  const pollCounter = useRef(0);
+
   const refreshReference = useCallback(async () => {
     try {
       const nextHealth = await api.health();
-      if (mounted.current) setHealth(nextHealth);
+      if (mounted.current && nextHealth) setHealth(nextHealth);
     } catch (requestError) {
       if (mounted.current) setError(requestError.message);
     }
     try {
       const nextModel = await api.model();
-      if (mounted.current) setModel(nextModel);
-    } catch (requestError) {
-      // A missing model is a valid state: the UI shows a "train the model" hint.
-      if (mounted.current) setModel(null);
+      if (mounted.current && nextModel) setModel(nextModel);
+    } catch (_requestError) {
+      if (mounted.current) setModel((curr) => curr || null);
     }
     try {
       const nextDataset = await api.datasetInfo();
-      if (mounted.current) setDataset(nextDataset);
-    } catch (requestError) {
-      if (mounted.current) setDataset(null);
+      if (mounted.current && nextDataset) setDataset(nextDataset);
+    } catch (_requestError) {
+      if (mounted.current) setDataset((curr) => curr || null);
     }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await Promise.all([refreshReference(), refreshCore(), refreshInvestigations()]);
-      if (!cancelled && mounted.current) setInitialising(false);
+      try {
+        await Promise.all([refreshReference(), refreshCore(), refreshInvestigations()]);
+      } finally {
+        if (!cancelled && mounted.current) setInitialising(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -131,6 +135,10 @@ export function StreamProvider({ children }) {
       if (!paused) {
         refreshCore();
         refreshInvestigations();
+        // Only retry reference if not yet loaded (e.g. backend was offline at boot)
+        if (!health || !dataset || !model) {
+          refreshReference();
+        }
       }
     },
     initialising ? null : isRunning ? RUNNING_POLL_MS : IDLE_POLL_MS,
@@ -332,7 +340,7 @@ export function StreamProvider({ children }) {
       isRunning,
       lastUpdatedAt,
       realtimeStatus,
-      engineOnline: Boolean(health),
+      engineOnline: Boolean((health && health.status === 'ok') || health || metrics),
       totals: (metrics && metrics.totals) || null,
       latency: (metrics && metrics.latency) || null,
       riskDistribution: (metrics && metrics.risk_distribution) || [],
