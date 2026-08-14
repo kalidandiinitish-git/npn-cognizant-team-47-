@@ -138,12 +138,27 @@ export default function Login() {
           </p>
 
           {!supabaseConfigured ? (
-            <div className="mt-5">
-              <Banner tone="warn" title="Supabase is not configured">
-                Add <code className="mono">VITE_SUPABASE_URL</code> and{' '}
-                <code className="mono">VITE_SUPABASE_ANON_KEY</code> to{' '}
-                <code className="mono">frontend/.env.local</code> to enable real sign-in.
-              </Banner>
+            <div className="mt-5 rounded-xl border border-brand-200/80 bg-brand-50/60 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-600">
+                  <Icon name="check" className="h-4 w-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-ink-900">Instant Demo Access</p>
+                  <p className="mt-0.5 text-2xs leading-relaxed text-ink-600">
+                    Explore live streaming, instant transaction scoring, fraud alerts, and model analytics with 1 click.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onDemo}
+                    disabled={busy}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-brand-700 active:scale-[0.99] disabled:opacity-50"
+                  >
+                    {busy ? <Spinner className="h-3.5 w-3.5" /> : null}
+                    Enter Console (Demo Mode) →
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -249,14 +264,13 @@ export default function Login() {
             </button>
           </form>
 
-          {demoModeAvailable ? (
+          {demoModeAvailable && supabaseConfigured ? (
             <div className="mt-4">
               <button type="button" className="btn-outline w-full" onClick={onDemo} disabled={busy}>
-                Continue without Supabase (demo mode)
+                Continue with Demo Mode
               </button>
               <p className="mt-2 text-2xs leading-relaxed text-ink-500">
-                Demo mode is enabled by VITE_DEMO_MODE and skips authentication. Use it only on a
-                local machine.
+                Skips authentication and enters the live console immediately.
               </p>
             </div>
           ) : null}

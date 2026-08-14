@@ -6,15 +6,11 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
 /**
- * Demo mode lets the dashboard run against the local API without Supabase
- * credentials. It is opt-in, defaults to off, and must stay off anywhere that is
- * reachable from the internet.
- *
- * When Supabase IS configured the demo button still appears so a user can skip
- * sign-up during a local demo, but the session is synthetic (no real token).
+ * Demo mode lets the dashboard run against the API without requiring Supabase Auth.
+ * Enabled by default unless explicitly disabled with VITE_DEMO_MODE=false.
  */
-const demoEnv = String(import.meta.env.VITE_DEMO_MODE).toLowerCase() === 'true';
-export const isDemoMode = demoEnv;
+const demoEnvRaw = import.meta.env.VITE_DEMO_MODE;
+export const isDemoMode = demoEnvRaw === undefined || String(demoEnvRaw).toLowerCase() !== 'false';
 
 export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {
