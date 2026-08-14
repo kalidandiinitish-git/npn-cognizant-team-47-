@@ -15,8 +15,11 @@ def test_scalar_and_vectorised_paths_agree():
     """The streaming fast path must match the training path exactly."""
     frame = pd.DataFrame(
         {
-            "Time": [0.0, 3599.0, 3600.0, 86_399.0, 86_400.0, 150_000.0],
-            "Amount": [0.0, 1.0, 99.99, 2500.5, 7.25, 19_000.0],
+            # The last row carries a negative amount. Upstream validation rejects
+            # those, but the two paths clipped it differently, so parity held
+            # only for the inputs that happened to be tested.
+            "Time": [0.0, 3599.0, 3600.0, 86_399.0, 86_400.0, 150_000.0, 42.0],
+            "Amount": [0.0, 1.0, 99.99, 2500.5, 7.25, 19_000.0, -12.5],
         }
     )
     engineered = add_engineered_features(frame)

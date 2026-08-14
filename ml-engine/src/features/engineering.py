@@ -26,11 +26,16 @@ NIGHT_END_HOUR = 6
 
 def engineer_scalar(time_seconds: float, amount: float) -> Dict[str, float]:
     """Derive the engineered features for one transaction."""
+    # Clamped to match add_engineered_features, which clips Amount at zero. The
+    # two paths have to produce the same numbers or the model sees one thing in
+    # training and another in production; log_amount was already clamped here,
+    # so only `amount` diverged, and only for negative inputs.
+    amount_value = max(float(amount), 0.0)
     seconds_of_day = float(time_seconds) % SECONDS_PER_DAY
     hour_of_day = math.floor(seconds_of_day / 3600.0)
     return {
-        "amount": float(amount),
-        "log_amount": math.log1p(max(float(amount), 0.0)),
+        "amount": amount_value,
+        "log_amount": math.log1p(amount_value),
         "seconds_of_day": seconds_of_day,
         "hour_of_day": float(hour_of_day),
         "is_night": 1.0 if hour_of_day < NIGHT_END_HOUR else 0.0,
