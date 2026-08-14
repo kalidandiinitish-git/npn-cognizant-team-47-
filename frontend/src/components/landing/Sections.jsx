@@ -136,12 +136,12 @@ const STEPS = [
   {
     title: 'Compare four detectors honestly',
     body:
-      'Logistic regression, random forest, XGBoost and isolation forest are scored on PR-AUC, recall and single-transaction latency. The fastest model within reach of the best PR-AUC wins.',
+      'Logistic regression, random forest, XGBoost and isolation forest are scored on PR-AUC, recall and single-transaction latency. Latency is a gate, not a tiebreak: the best PR-AUC among the models fast enough to hold the budget wins.',
   },
   {
     title: 'Stream the held-out split',
     body:
-      'A Python generator replays the untouched test transactions as an event stream. One record is parsed, scored and persisted before the next is read.',
+      'A Python generator replays the untouched test transactions as an event stream. One record is parsed and scored before the next is read; writes are batched onto a separate thread so storage latency never counts against the scoring budget.',
   },
   {
     title: 'Aggregate, alert, display',
