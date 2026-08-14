@@ -213,6 +213,32 @@ def test_dataset_info_reports_measured_values_not_placeholders(client, tmp_path,
     assert api_main._count_stream_rows(missing) == 1
 
 
+def test_dataset_info_counts_rows_for_uploads(client, tmp_path, monkeypatch):
+    """Uploads carried no row count, so the dashboard rendered every one as 0 rows."""
+    from src.api import main as api_main
+
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    (upload_dir / "customer_batch.csv").write_text(
+        "Time,Amount\n1,10.0\n2,20.0\n3,30.0\n4,40.0\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(api_main, "UPLOAD_DIR", upload_dir)
+
+    uploads = client.get("/api/dataset/info").json()["uploads"]
+    assert len(uploads) == 1
+    assert uploads[0]["name"] == "customer_batch.csv"
+    assert uploads[0]["rows"] == 4, "an uploaded file reports the rows it actually has"
+
+
+def test_high_risk_accounts_publish_the_weighting(client):
+    """The dashboard renders these weights; a hardcoded copy silently goes stale."""
+    from src.risk.scoring import ACCOUNT_RISK_WEIGHTS
+
+    body = client.get("/api/accounts/high-risk").json()
+    assert body["weights"] == ACCOUNT_RISK_WEIGHTS
+    assert sum(body["weights"].values()) == pytest.approx(1.0)
+
+
 def test_explicit_require_auth_without_credentials_fails_closed(client, monkeypatch):
     """REQUIRE_AUTH=true with no Supabase keys used to serve everything openly."""
     monkeypatch.setattr(settings, "require_auth", True)

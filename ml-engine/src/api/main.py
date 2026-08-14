@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
 from ..config import (
+    ALERT_RISK_SCORE,
     DATA_DIR,
     LATENCY_TARGET_MS,
     RISK_BANDS,
@@ -30,7 +31,7 @@ from ..config import (
 from ..features.identity import derive_identity
 from ..inference.predictor import ModelNotTrainedError, get_predictor
 from ..investigations import InvestigationConflict, InvestigationNotFound
-from ..risk.scoring import assess
+from ..risk.scoring import ACCOUNT_RISK_WEIGHTS, assess
 from ..streaming.generator import (
     STREAM_EPOCH,
     TransactionEvent,
@@ -438,9 +439,19 @@ def high_risk_accounts(
     limit: int = Query(default=50, ge=1, le=200),
     user: AuthenticatedUser = Depends(require_user),
 ) -> Dict[str, Any]:
-    """Accounts whose aggregated behaviour is risky (PRD FR-011)."""
+    """Accounts whose aggregated behaviour is risky (PRD FR-011).
+
+    ``weights`` ships with the rows so the dashboard's "how this is calculated"
+    panel reads the real numbers instead of a copy that silently goes stale the
+    first time the weighting is retuned.
+    """
     rows = get_processor().high_risk_accounts(minimum_level=minimum_level, limit=limit)
-    return {"count": len(rows), "accounts": rows}
+    return {
+        "count": len(rows),
+        "accounts": rows,
+        "weights": dict(ACCOUNT_RISK_WEIGHTS),
+        "alert_risk_score": ALERT_RISK_SCORE,
+    }
 
 
 @router.get("/accounts/{account_id}", tags=["dashboard"])
@@ -495,18 +506,21 @@ def model_details(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, 
 #: file's identity. Keying on (size, mtime) rather than a bare flag means a
 #: retrained stream split, or one that appears after the API booted without it,
 #: is recounted instead of serving a stale number forever.
-_stream_rows_cache: Dict[str, Any] = {"key": None, "rows": 0}
+#: Keyed by path so uploads are cached alongside the stream split rather than
+#: evicting it on every listing.
+_row_count_cache: Dict[str, Any] = {}
 
 
 def _count_stream_rows(stream_path: Path) -> int:
     if not stream_path.exists():
         return 0
     stat = stream_path.stat()
-    key = (str(stream_path), stat.st_size, stat.st_mtime_ns)
-    if _stream_rows_cache["key"] != key:
-        _stream_rows_cache["rows"] = count_transactions(stream_path)
-        _stream_rows_cache["key"] = key
-    return _stream_rows_cache["rows"]
+    key = (stat.st_size, stat.st_mtime_ns)
+    cached = _row_count_cache.get(str(stream_path))
+    if cached is None or cached[0] != key:
+        cached = (key, count_transactions(stream_path))
+        _row_count_cache[str(stream_path)] = cached
+    return cached[1]
 
 
 @router.get("/dataset/info", tags=["dataset"])
@@ -540,6 +554,9 @@ def dataset_info(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, A
                 {
                     "name": item.name,
                     "size_bytes": stat.st_size,
+                    # Measured, not remembered: without this the dashboard has no
+                    # row count for an upload and renders every one as "0 rows".
+                    "rows": _count_stream_rows(item),
                     "modified_at": datetime.fromtimestamp(
                         stat.st_mtime, tz=timezone.utc
                     ).isoformat(),
