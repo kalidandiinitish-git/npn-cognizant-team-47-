@@ -29,20 +29,38 @@ Target topology:
 
 ## 2. Detection engine (Render)
 
-The model artifacts are needed at runtime. Either commit them (roughly 2 MB for
-XGBoost) or train during the build.
+`render.yaml` in the repository root is a Render blueprint, so the fastest path
+is **New -> Blueprint -> pick this repository**. Render reads the build command,
+start command, health check and the non-secret environment variables from it, and
+prompts for the four values marked `sync: false`.
+
+The blueprint sets `rootDir: ml-engine`, so every relative path the engine
+resolves (`models/`, `data/`) matches the local layout.
 
 **Build command**
 
 ```bash
-pip install -r ml-engine/requirements.txt
+pip install -r requirements.txt
 ```
 
 **Start command**
 
 ```bash
-cd ml-engine && uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1
 ```
+
+Training during the build is not an option: the 150 MB `creditcard.csv` is not
+in the repository, so there is nothing to train on. The three files the engine
+loads at startup are committed instead, with an explicit `.gitignore` exception
+and a `.gitattributes` `binary` rule so the pickles survive cloning intact:
+
+| File | Size |
+| --- | --- |
+| `ml-engine/models/fraud_model.joblib` | 778 KB |
+| `ml-engine/models/preprocessor.joblib` | 2 KB |
+| `ml-engine/data/stream_test.csv` | 13.4 MB, 42,560 rows |
+
+To ship a retrained model, run training locally and commit the new artifacts.
 
 **Environment variables**
 
@@ -76,9 +94,15 @@ Notes:
 | Setting | Value |
 | --- | --- |
 | Root directory | `frontend` |
-| Build command | `npm run build` |
+| Framework preset | Vite (declared in `frontend/vercel.json`) |
+| Build command | auto-detected from `package.json` |
 | Output directory | `dist` |
-| Install command | `npm install` |
+| Install command | auto-detected from the lockfile (`pnpm-lock.yaml` is present, so pnpm) |
+
+Root directory is the one setting you must change by hand; Vercel defaults to the
+repository root, where there is no `package.json`. Everything else comes from
+`frontend/vercel.json`, which is committed. The build command is deliberately not
+pinned there so the detected package manager and the install step stay consistent.
 
 **Environment variables**
 
@@ -92,11 +116,16 @@ Notes:
 Vite inlines `VITE_*` variables into the bundle, so only public values belong
 here. The service-role key must never appear.
 
-Client-side routing needs a rewrite so deep links work. Add `frontend/vercel.json`:
+Client-side routing needs a rewrite so deep links work. This is already committed
+as `frontend/vercel.json`:
 
 ```json
 { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
 ```
+
+Vercel checks the filesystem before applying rewrites, so hashed assets under
+`/assets/` and `/favicon.svg` are still served as files rather than being
+swallowed by the catch-all.
 
 Netlify equivalent, in `frontend/public/_redirects`:
 
