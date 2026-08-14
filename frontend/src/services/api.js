@@ -381,6 +381,9 @@ function getFallback(endpoint, params = {}) {
   }
 
   if (endpoint === 'metrics') {
+    const isUploaded = Boolean(activeUploadedDataset);
+    const totalRows = isUploaded ? activeUploadedDataset.rows : 42560;
+    const sourceName = isUploaded ? activeUploadedDataset.filename : 'stream_test.csv';
     const tps = mockStreamRunning ? 8.4 : 0;
     const fraudRate = +(100.0 * mockAlertsCount / Math.max(1, mockProcessed)).toFixed(2);
     const criticalCount = Math.max(1, Math.floor(mockAlertsCount * 0.6));
@@ -392,7 +395,8 @@ function getFallback(endpoint, params = {}) {
         alerts_raised: mockAlertsCount,
         transactions_per_second: tps,
         elapsed_seconds: mockStreamRunning ? 24.5 : 0,
-        source_total_rows: 42560,
+        source_total_rows: totalRows,
+        source_name: sourceName,
       },
       totals: {
         total_transactions: mockProcessed,
@@ -404,6 +408,8 @@ function getFallback(endpoint, params = {}) {
         high_risk_accounts: 3,
         monitored_accounts: 28,
         transactions_per_second: tps,
+        source_total_rows: totalRows,
+        source_name: sourceName,
       },
       account_risk_levels: {
         low: 19,
@@ -978,6 +984,13 @@ export const api = {
       
       activeUploadedDataset = parsed;
       uploadedTransactionsPool = parsed.records;
+      mockProcessed = Math.min(25, parsed.rows);
+      mockTransactionsList = parsed.records.slice(0, Math.min(30, parsed.rows));
+      mockCases = mockTransactionsList
+        .filter((t) => t.is_fraud)
+        .map((t, idx) => createCaseForTransaction(t, idx));
+      mockAlertsCount = mockCases.length;
+      mockStreamRunning = true;
 
       // Also try posting to backend if online
       const form = new FormData();

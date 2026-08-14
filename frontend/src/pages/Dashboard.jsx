@@ -96,7 +96,11 @@ export default function Dashboard() {
         <StatTile
           label="Total transactions"
           value={totals ? formatNumber(totals.total_transactions) : '--'}
-          hint={streamStatus ? `${formatNumber(streamStatus.source_total_rows)} available in split` : null}
+          hint={
+            streamStatus
+              ? `${formatNumber(streamStatus.source_total_rows || 42560)} in ${streamStatus.source_name || 'split'}`
+              : null
+          }
           icon="stream"
         >
           <div className="mt-3">

@@ -20,6 +20,12 @@ export default function StreamControls() {
   const [message, setMessage] = useState(null);
   const popover = useRef(null);
 
+  useEffect(() => {
+    if (dataset && dataset.stream_source && dataset.stream_source.name) {
+      setSource(dataset.stream_source.name);
+    }
+  }, [dataset?.stream_source?.name]);
+
   // Labelled fraud is rare (52 cases in 42,560 rows), so starting from row zero
   // means minutes of clean traffic before anything is flagged. These presets let
   // the operator start near labelled fraud instead; ordering is untouched.
