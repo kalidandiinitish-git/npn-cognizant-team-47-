@@ -65,13 +65,14 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   const signIn = useCallback(async (email, password) => {
-    if (!supabase) {
-      if (!isDemoMode) {
-        throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
-      }
+    // Demo mode shortcut: works whether or not Supabase is configured.
+    if (isDemoMode && email === 'demo@local') {
       sessionStorage.setItem(DEMO_STORAGE_KEY, 'active');
       setSession({ user: { email: 'demo@local', id: 'demo-user' }, demo: true });
       return { demo: true };
+    }
+    if (!supabase) {
+      throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);

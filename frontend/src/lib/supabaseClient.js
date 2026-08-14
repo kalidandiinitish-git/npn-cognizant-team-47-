@@ -9,9 +9,12 @@ export const isSupabaseConfigured = Boolean(url && anonKey);
  * Demo mode lets the dashboard run against the local API without Supabase
  * credentials. It is opt-in, defaults to off, and must stay off anywhere that is
  * reachable from the internet.
+ *
+ * When Supabase IS configured the demo button still appears so a user can skip
+ * sign-up during a local demo, but the session is synthetic (no real token).
  */
-export const isDemoMode =
-  !isSupabaseConfigured && String(import.meta.env.VITE_DEMO_MODE).toLowerCase() === 'true';
+const demoEnv = String(import.meta.env.VITE_DEMO_MODE).toLowerCase() === 'true';
+export const isDemoMode = demoEnv;
 
 export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {
