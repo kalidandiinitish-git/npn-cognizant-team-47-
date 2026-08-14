@@ -483,85 +483,80 @@ def model_details(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, 
     return metadata
 
 
-_stream_rows_cache: Optional[int] = None
+#: Counting rows means reading a 14 MB file, so the result is cached against the
+#: file's identity. Keying on (size, mtime) rather than a bare flag means a
+#: retrained stream split, or one that appears after the API booted without it,
+#: is recounted instead of serving a stale number forever.
+_stream_rows_cache: Dict[str, Any] = {"key": None, "rows": 0}
+
+
+def _count_stream_rows(stream_path: Path) -> int:
+    if not stream_path.exists():
+        return 0
+    stat = stream_path.stat()
+    key = (str(stream_path), stat.st_size, stat.st_mtime_ns)
+    if _stream_rows_cache["key"] != key:
+        _stream_rows_cache["rows"] = count_transactions(stream_path)
+        _stream_rows_cache["key"] = key
+    return _stream_rows_cache["rows"]
 
 
 @router.get("/dataset/info", tags=["dataset"])
 def dataset_info(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, Any]:
-    """Active dataset, held-out stream file and the EDA profile (PRD FR-001)."""
-    global _stream_rows_cache
-    try:
-        dataset = settings.resolve_dataset_path()
-        profile_path = DATA_DIR / "dataset_profile.json"
-        profile: Optional[Dict[str, Any]] = None
-        if profile_path.exists():
+    """Active dataset, held-out stream file and the EDA profile (PRD FR-001).
+
+    Every field is measured from disk. There is deliberately no invented
+    fallback: a dataset page that reports a row count for a file that is not
+    there is worse than one that reports the file is missing.
+    """
+    dataset = settings.resolve_dataset_path()
+    profile_path = DATA_DIR / "dataset_profile.json"
+    profile: Optional[Dict[str, Any]] = None
+    if profile_path.exists():
+        try:
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            logger.warning("Could not read %s: %s", profile_path, error)
+
+    stream_path = settings.stream_data_path
+    stream_exists = stream_path.exists()
+
+    uploads: List[Dict[str, Any]] = []
+    if UPLOAD_DIR.exists():
+        for item in sorted(UPLOAD_DIR.glob("*.csv")):
             try:
-                profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            except Exception:
-                profile = None
+                stat = item.stat()
+            except OSError:  # removed between glob and stat
+                continue
+            uploads.append(
+                {
+                    "name": item.name,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+            )
 
-        stream_path = settings.stream_data_path
-        if _stream_rows_cache is None or not stream_path.exists():
-            _stream_rows_cache = count_transactions(stream_path) if stream_path.exists() else 0
-        stream_rows = _stream_rows_cache
-        fraud_index = load_index()
-
-        uploads: List[Dict[str, Any]] = []
-        if UPLOAD_DIR.exists():
-            for item in sorted(UPLOAD_DIR.glob("*.csv")):
-                try:
-                    uploads.append(
-                        {
-                            "name": item.name,
-                            "size_bytes": item.stat().st_size,
-                            "modified_at": datetime.fromtimestamp(
-                                item.stat().st_mtime, tz=timezone.utc
-                            ).isoformat(),
-                        }
-                    )
-                except Exception:
-                    continue
-
-        return {
-            "training_dataset": {
-                "path": str(dataset) if dataset else None,
-                "name": dataset.name if dataset else None,
-                "exists": dataset is not None,
-                "size_bytes": dataset.stat().st_size if dataset else 0,
-            },
-            "stream_source": {
-                "path": str(stream_path),
-                "name": stream_path.name,
-                "exists": stream_path.exists(),
-                "rows": stream_rows,
-                "size_bytes": stream_path.stat().st_size if stream_path.exists() else 0,
-            },
-            "stream_epoch": STREAM_EPOCH.isoformat(),
-            "uploads": uploads,
-            "profile": profile,
-            "fraud_index": fraud_index,
-        }
-    except Exception as e:
-        logger.exception("Error preparing dataset_info: %s", e)
-        return {
-            "training_dataset": {
-                "path": None,
-                "name": "creditcard.csv",
-                "exists": False,
-                "size_bytes": 0,
-            },
-            "stream_source": {
-                "path": str(settings.stream_data_path),
-                "name": "stream_test.csv",
-                "exists": True,
-                "rows": 42560,
-                "size_bytes": 0,
-            },
-            "stream_epoch": STREAM_EPOCH.isoformat(),
-            "uploads": [],
-            "profile": None,
-            "fraud_index": None,
-        }
+    return {
+        "training_dataset": {
+            "path": str(dataset) if dataset else None,
+            "name": dataset.name if dataset else None,
+            "exists": dataset is not None,
+            "size_bytes": dataset.stat().st_size if dataset else 0,
+        },
+        "stream_source": {
+            "path": str(stream_path),
+            "name": stream_path.name,
+            "exists": stream_exists,
+            "rows": _count_stream_rows(stream_path),
+            "size_bytes": stream_path.stat().st_size if stream_exists else 0,
+        },
+        "stream_epoch": STREAM_EPOCH.isoformat(),
+        "uploads": uploads,
+        "profile": profile,
+        "fraud_index": load_index(),
+    }
 
 
 @router.post("/dataset/upload", tags=["dataset"])

@@ -190,6 +190,29 @@ def test_dataset_info_reports_the_source(client):
         assert body["training_dataset"]["name"].endswith(".csv")
 
 
+def test_dataset_info_reports_measured_values_not_placeholders(client, tmp_path, monkeypatch):
+    """The route used to answer any failure with a hardcoded 42560-row file."""
+    from src.api import main as api_main
+
+    missing = tmp_path / "not_generated_yet.csv"
+    monkeypatch.setattr(settings, "stream_data_path", missing)
+
+    body = client.get("/api/dataset/info").json()
+    assert body["stream_source"]["exists"] is False
+    assert body["stream_source"]["rows"] == 0, "a missing file has no rows to report"
+
+    # Once the file appears, the count must refresh rather than serve the
+    # cached zero forever.
+    missing.write_text("Time,Amount\n1,10.0\n2,20.0\n3,30.0\n", encoding="utf-8")
+    refreshed = client.get("/api/dataset/info").json()
+    assert refreshed["stream_source"]["exists"] is True
+    assert refreshed["stream_source"]["rows"] == 3
+
+    # And a rewrite of the same path is recounted, not served from cache.
+    missing.write_text("Time,Amount\n1,10.0\n", encoding="utf-8")
+    assert api_main._count_stream_rows(missing) == 1
+
+
 def test_alert_status_update_requires_a_known_alert(client):
     response = client.patch("/api/alerts/TXN-does-not-exist", json={"status": "resolved"})
     assert response.status_code == 404
