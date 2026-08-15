@@ -17,10 +17,25 @@ name: Keep engine awake
 #    sleeps again. STREAM_AUTOSTART in render.yaml is what limits the damage.
 #  - Cron here is best-effort and runs late under load, hence 10 minutes against
 #    a 15 minute window rather than 14.
+#
+# Why this does not run around the clock. Render's free tier bills instance-hours
+# across the workspace, and a service pinged every 10 minutes never sleeps, so
+# 24/7 polling spends ~720 of the ~750 monthly hours on an engine nobody is
+# looking at — and running out stops the demo far more thoroughly than a cold
+# start ever does. Restricting the window to demo hours costs one cold boot for
+# the first visitor of the day and buys real headroom.
+#
+# GitHub cron is UTC and this project is worked on in IST (UTC+5:30), so the
+# window is written shifted: 01:00-17:59 UTC is 06:30-23:29 IST. Outside it the
+# engine sleeps, the dashboard shows its "Connecting to the detection engine"
+# banner for the ~50s boot (AppShell.jsx), and STREAM_AUTOSTART brings the stream
+# back by itself. Widen the hour range here if the demo needs to be live earlier
+# or later — and remember to convert.
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # Every 10 minutes, 01:00-17:59 UTC == 06:30-23:29 IST.
+    - cron: '*/10 1-17 * * *'
   workflow_dispatch:
 
 # A late run must not stack on top of a still-running one.
