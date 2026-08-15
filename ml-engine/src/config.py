@@ -110,6 +110,13 @@ class TrainingConfig:
     #: Number of test rows used for the latency benchmark.
     latency_sample_size: int = 500
 
+    #: Rows the novelty detectors (Local Outlier Factor, One-Class SVM) are
+    #: fitted on. Both scale badly - LOF keeps every reference point and queries
+    #: them at predict time, One-Class SVM training is quadratic in the sample
+    #: size - so fitting them on the full ~200 k row split would take longer than
+    #: the rest of the pipeline combined and blow the 50 ms serving budget.
+    anomaly_fit_sample: int = 20_000
+
     #: Optional row cap, useful for a fast smoke run (`--max-rows`).
     max_rows: Optional[int] = None
 

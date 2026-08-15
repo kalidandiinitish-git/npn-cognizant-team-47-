@@ -29,6 +29,8 @@ from sklearn.ensemble import (
     RandomForestClassifier,
 )
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
 
 from ..config import (
     DATA_DIR,
@@ -100,12 +102,30 @@ def build_candidates(
             n_jobs=-1,
             random_state=random_state,
         ),
+        # --- Anomaly detectors (PRD technology_stack.anomaly_detection) -----
+        # Fitted without labels, so they are the honest comparison point for
+        # "can this be caught as an anomaly rather than learned as a class?".
         "isolation_forest": IsolationForest(
             n_estimators=100,
             contamination=contamination,
             max_samples=256 if fast else 4096,
             n_jobs=-1,
             random_state=random_state,
+        ),
+        # novelty=True keeps decision_function available at serving time; it also
+        # means the fit data must be clean, which anomaly_fit_matrix enforces.
+        "local_outlier_factor": LocalOutlierFactor(
+            n_neighbors=20,
+            novelty=True,
+            n_jobs=-1,
+        ),
+        # nu is the assumed outlier fraction. The dataset's own fraud rate is
+        # ~0.0017, low enough that the solver produces a degenerate boundary, so
+        # it is floored at 1 %.
+        "one_class_svm": OneClassSVM(
+            kernel="rbf",
+            gamma="scale",
+            nu=float(min(max(contamination, 0.01), 0.5)),
         ),
     }
 
@@ -134,8 +154,48 @@ def build_candidates(
     return candidates
 
 
+#: Candidates fitted without labels.
+ANOMALY_DETECTORS = frozenset({"isolation_forest", "local_outlier_factor", "one_class_svm"})
+
+#: The subset that are *novelty* detectors: they assume the data they are fitted
+#: on contains no fraud. Isolation Forest is deliberately not one of them - it
+#: takes the contaminated split as it comes and is told the contamination rate.
+NOVELTY_DETECTORS = frozenset({"local_outlier_factor", "one_class_svm"})
+
+
 def is_unsupervised(name: str) -> bool:
-    return name in {"isolation_forest", "one_class_svm"}
+    return name in ANOMALY_DETECTORS
+
+
+def anomaly_fit_matrix(
+    name: str,
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    random_state: int,
+    cap: Optional[int] = None,
+) -> np.ndarray:
+    """The rows an unsupervised detector is actually fitted on.
+
+    Isolation Forest sees the training split unchanged. The novelty detectors get
+    a bounded random sample of the *legitimate* rows only, for two reasons:
+
+      * correctness - a novelty detector fitted on fraud learns fraud as normal;
+      * cost - LOF stores every reference point and queries them per prediction,
+        and One-Class SVM training is quadratic, so an unbounded fit would break
+        both the training time and the 50 ms serving budget.
+    """
+    if name not in NOVELTY_DETECTORS:
+        return x_train
+
+    limit = TRAINING.anomaly_fit_sample if cap is None else cap
+    legitimate = np.flatnonzero(y_train == 0)
+    size = int(min(limit, legitimate.size))
+    if size >= legitimate.size:
+        return x_train[legitimate]
+
+    rng = np.random.default_rng(random_state)
+    chosen = np.sort(rng.choice(legitimate, size=size, replace=False))
+    return x_train[chosen]
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +210,7 @@ def run_training(
     latency_samples: int = TRAINING.latency_sample_size,
     write_stream_file: bool = True,
     use_smote: bool = False,
+    undersample: Optional[float] = None,
 ) -> Dict[str, Any]:
     ensure_directories()
     started = time.time()
@@ -218,6 +279,12 @@ def run_training(
         x_train, y_train = x_train[keep_rows], y_train[keep_rows]
         logger.info("Fast mode: training on %s rows", f"{len(x_train):,}")
 
+    # Resampling (FR-004) touches the training split only; validation and test
+    # keep the real class distribution so the reported metrics stay honest.
+    if undersample is not None:
+        x_train, y_train = apply_undersampling(
+            x_train, y_train, undersample, TRAINING.random_state
+        )
     if use_smote:
         x_train, y_train = apply_smote(x_train, y_train, TRAINING.random_state)
 
@@ -247,15 +314,25 @@ def run_training(
     for name, estimator in candidates.items():
         logger.info("--- Training %s ---", name)
         fit_started = time.time()
+        fit_matrix = x_train
         if is_unsupervised(name):
-            estimator.fit(x_train)
+            fit_matrix = anomaly_fit_matrix(name, x_train, y_train, TRAINING.random_state)
+            if fit_matrix is not x_train:
+                logger.info(
+                    "%s: fitting on %s legitimate rows (novelty detection)",
+                    name,
+                    f"{len(fit_matrix):,}",
+                )
+            estimator.fit(fit_matrix)
         else:
             estimator.fit(x_train, y_train)
         fit_seconds = time.time() - fit_started
 
         calibration = None
         if is_unsupervised(name):
-            sample = x_train[: min(20_000, len(x_train))]
+            # Calibrate the sigmoid on the same rows the detector was fitted on,
+            # so serving-time probabilities sit on the scale it was tuned for.
+            sample = fit_matrix[: min(20_000, len(fit_matrix))]
             calibration = calibration_from_scores(estimator.decision_function(sample))
         calibrations[name] = calibration
 
@@ -356,6 +433,20 @@ def run_training(
             "channel",
         ],
         "anomaly_calibration": best_calibration,
+        # What was actually done about the ~1:600 class ratio (FR-004), so the
+        # model card and the Analytics page can state it instead of implying it.
+        "imbalance_handling": {
+            "class_weighting": True,
+            "random_undersampling": undersample,
+            "smote": bool(use_smote),
+            "threshold_tuning": True,
+            "evaluation": "precision-recall first (PR-AUC, precision, recall, F1)",
+            "training_split_balance": {
+                "fraud": positives,
+                "legitimate": negatives,
+                "fraud_percentage": round(100 * fraud_rate, 6),
+            },
+        },
         "dataset": dataset_profile,
         "metrics": {"validation": best["validation"], "test": test_metrics},
         "precision_recall_curve": curve,
@@ -481,6 +572,51 @@ def select_best(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             COMFORTABLE_LATENCY_MS,
         )
     return chosen
+
+
+def apply_undersampling(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    ratio: float,
+    random_state: int,
+):
+    """Random undersampling of the majority class (FR-004), training split only.
+
+    ``ratio`` is the fraud-to-legitimate ratio wanted afterwards, so 0.1 leaves
+    ten legitimate transactions per fraud. Every fraud row is kept - throwing
+    away positives from a 0.17 % class would be self-defeating.
+
+    Applied only to the training split. Undersampling the validation or test
+    split would inflate precision by deleting the legitimate transactions the
+    model is supposed to avoid flagging.
+    """
+    if not 0.0 < ratio <= 1.0:
+        raise ValueError(f"undersampling ratio must be in (0, 1], got {ratio}")
+
+    positives = np.flatnonzero(y_train == 1)
+    negatives = np.flatnonzero(y_train == 0)
+    if positives.size == 0:
+        logger.warning("No fraud rows in the training split; skipping undersampling.")
+        return x_train, y_train
+
+    keep = int(round(positives.size / ratio))
+    if keep >= negatives.size:
+        logger.info(
+            "Training split already at or below a %.3f ratio; skipping undersampling.", ratio
+        )
+        return x_train, y_train
+
+    rng = np.random.default_rng(random_state)
+    chosen = rng.choice(negatives, size=keep, replace=False)
+    rows = np.sort(np.concatenate([positives, chosen]))
+    logger.info(
+        "Random undersampling: %s -> %s rows (%s fraud / %s legitimate)",
+        f"{len(x_train):,}",
+        f"{rows.size:,}",
+        f"{positives.size:,}",
+        f"{keep:,}",
+    )
+    return x_train[rows], y_train[rows]
 
 
 def apply_smote(x_train: np.ndarray, y_train: np.ndarray, random_state: int):
@@ -684,6 +820,17 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Apply SMOTE to the training split (off by default; class weights are used).",
     )
+    parser.add_argument(
+        "--undersample",
+        type=float,
+        default=None,
+        metavar="RATIO",
+        help=(
+            "Randomly undersample legitimate transactions in the training split "
+            "to the given fraud:legitimate ratio, e.g. 0.1 for 1 fraud per 10 "
+            "legitimate. Every fraud row is kept. Off by default."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -703,6 +850,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             latency_samples=args.latency_samples,
             write_stream_file=not args.no_stream_file,
             use_smote=args.smote,
+            undersample=args.undersample,
         )
     except Exception as error:
         logger.error("Training failed: %s", error, exc_info=True)

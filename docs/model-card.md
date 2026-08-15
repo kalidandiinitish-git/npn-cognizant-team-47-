@@ -122,11 +122,55 @@ headroom (p95 under 25 ms). The random forest has the best PR-AUC but its p95 of
 33 ms consumes two thirds of the budget on an idle laptop, leaving nothing for a
 loaded host. XGBoost gives up 0.024 PR-AUC and runs roughly 19x faster.
 
-The isolation forest is included because the requirements ask for an anomaly
-detection baseline. Its PR-AUC of 0.055 against a supervised 0.85 is the useful
+### Anomaly detection baselines
+
+The requirements name three unsupervised detectors, and all three are trained and
+compared on every run:
+
+| Detector | How it is fitted |
+| --- | --- |
+| Isolation forest | The training split as it comes, with `contamination` set to the observed fraud rate. |
+| Local outlier factor | `novelty=True`, on a bounded random sample of legitimate rows only. |
+| One-Class SVM | RBF kernel, `nu` floored at 0.01, on the same legitimate-only sample. |
+
+The last two are *novelty* detectors: they assume the data they are fitted on is
+clean, so fitting them on the contaminated split would teach them that fraud is
+normal. Both also scale badly - LOF keeps every reference point and queries them
+at predict time, One-Class SVM training is quadratic in the sample size - so the
+fit sample is capped at `TrainingConfig.anomaly_fit_sample` (20 000 rows) to keep
+training tractable and serving inside the 50 ms budget.
+
+The isolation forest's PR-AUC of 0.055 against a supervised 0.85 is the useful
 result: with labels available, unsupervised anomaly detection is the wrong tool
 here. Its ROC-AUC of 0.954 looks respectable, which illustrates why ROC-AUC
 misleads under extreme imbalance.
+
+> The LOF and One-Class SVM rows are absent from the table above because the
+> shipped artifacts were trained before those candidates existed. They appear in
+> `model_metadata.json` -> `candidates` after the next full retrain, which needs
+> `creditcard.csv` (see [Reproducing](#reproducing)). Both were verified end to
+> end on the held-out split; no full-dataset numbers are claimed for them yet.
+
+## Class imbalance handling
+
+Fraud is 0.167 % of the dataset, roughly 1 in 600. Four levers are available, and
+all resampling is applied to the training split only - resampling validation or
+test would inflate precision by deleting the transactions the model must avoid
+flagging:
+
+| Lever | Status | How |
+| --- | --- | --- |
+| Class weighting | **On by default** | `scale_pos_weight` (XGBoost), `class_weight='balanced'` (logistic regression, random forest) |
+| Threshold tuning | **On by default** | Maximise F2 subject to precision >= 0.50 |
+| PR-first evaluation | **On by default** | PR-AUC, precision, recall, F1 and the PR curve; accuracy is not reported |
+| Random undersampling | Opt-in | `--undersample RATIO`, e.g. `0.1` for 1 fraud per 10 legitimate; every fraud row is kept |
+| SMOTE | Opt-in | `--smote`, synthesises minority rows to a 0.1 ratio |
+
+The defaults use class weighting rather than resampling: reweighting the loss
+keeps every real legitimate transaction in the split, while undersampling throws
+away the majority-class detail the model needs to keep false positives low. The
+resampling flags exist so the trade-off can be measured rather than asserted, and
+whatever was used is recorded in `model_metadata.json` -> `imbalance_handling`.
 
 ## Latency
 
@@ -186,9 +230,28 @@ threshold search holds a precision floor rather than maximising recall alone.
 
 ## Reproducing
 
+Needs `creditcard.csv`, which is not in the repository (~150 MB). Put it in
+`ml-engine/data/`, at the repo root, or point `DATA_PATH` at it.
+
 ```powershell
+# Windows
 cd ml-engine
 .\.venv\Scripts\python.exe -m src.training.train --latency-samples 500
+```
+
+```bash
+# macOS / Linux
+cd ml-engine
+./.venv/bin/python -m src.training.train --latency-samples 500
+```
+
+Useful variations:
+
+```bash
+--fast                  # smaller forests and a subsampled split, for a smoke run
+--models xgboost,one_class_svm   # train a subset of the candidates
+--undersample 0.1       # random undersampling of the training split (FR-004)
+--smote                 # SMOTE oversampling of the training split (FR-004)
 ```
 
 Deterministic given the same data and `random_state = 42`. Latency figures vary
