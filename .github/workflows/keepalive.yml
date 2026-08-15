@@ -1,0 +1,61 @@
+name: Keep engine awake
+
+# Render's free plan stops the detection engine after ~15 minutes without an
+# inbound request. A cold boot then runs long enough that the dashboard's first
+# calls time out, and services/api.js answers those timeouts with fabricated
+# transactions rather than an error — so a sleeping engine looks exactly like a
+# working one showing invented fraud figures. Polling below the idle window is
+# what keeps the demo honest.
+#
+# Verified 2026-08-15: engine uptime rose monotonically under a 30s poll, so it
+# stays up while it is being called. It sleeps for want of traffic; it does not
+# crash.
+#
+# Two caveats worth knowing rather than discovering:
+#  - GitHub disables scheduled workflows on a repository with no activity for 60
+#    days. If the demo goes quiet for two months this stops and the engine
+#    sleeps again. STREAM_AUTOSTART in render.yaml is what limits the damage.
+#  - Cron here is best-effort and runs late under load, hence 10 minutes against
+#    a 15 minute window rather than 14.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# A late run must not stack on top of a still-running one.
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping engine health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the engine and confirm the model is loaded
+        env:
+          # Overridable so a redeployed engine does not need a code change.
+          ENGINE_URL: ${{ vars.ENGINE_URL || 'https://fraudstream-ai-engine-0t6q.onrender.com' }}
+        run: |
+          set -euo pipefail
+
+          # A sleeping instance answers nothing until it has booted, which is
+          # well past any default timeout, so this has to outwait the boot
+          # rather than report a waking host as dead.
+          body=$(curl --silent --show-error --fail-with-body \
+                      --max-time 180 --retry 3 --retry-all-errors --retry-delay 15 \
+                      "$ENGINE_URL/api/health")
+
+          echo "$body"
+
+          # A 200 alone is not health: the engine serves /api/health before the
+          # model artifacts load, and an engine with no model produces no
+          # detections for the dashboard to show.
+          if ! echo "$body" | jq -e '.model_loaded == true' >/dev/null; then
+            echo "::error::engine answered but has no model loaded"
+            exit 1
+          fi
+
+          echo "$body" | jq -r '"ok: model=\(.model_name) uptime=\(.engine_uptime_seconds)s"'

@@ -70,8 +70,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-    allow_credentials=True,
+    allow_origin_regex=settings.cors_origin_regex,
+    # The dashboard authenticates with a bearer token in the Authorization
+    # header, which the browser only sends because the code puts it there. It
+    # holds no cookie for this origin and never sets withCredentials, so nothing
+    # here needs credentialed CORS — and leaving it on is what would make the
+    # host-shape match above worth attacking.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -659,7 +664,11 @@ def on_startup() -> None:
     )
     ensure_directories()
     logger.info("FraudStream AI engine %s starting", __version__)
+    # Both halves, because a browser-side CORS rejection leaves no trace in
+    # these logs at all — the request succeeds here and is discarded there. The
+    # startup line is the only place the allowed set is visible.
     logger.info("CORS origins: %s", settings.cors_origins)
+    logger.info("CORS origin regex: %s", settings.cors_origin_regex)
     if settings.auth_misconfigured:
         logger.error(
             "REQUIRE_AUTH is enabled but SUPABASE_URL / SUPABASE_ANON_KEY are missing. "
@@ -678,6 +687,21 @@ def on_startup() -> None:
         )
     except ModelNotTrainedError as error:
         logger.warning("Model not loaded: %s", error)
+        return
+
+    if settings.stream_autostart:
+        # processor.start() hands the work to a background thread and returns, so
+        # this cannot delay the port opening — which matters, because Render is
+        # already holding a woken visitor's request while this runs.
+        try:
+            result = get_processor().start(
+                delay_ms=settings.stream_delay_ms, persist=True, reset=True
+            )
+            logger.info("Stream autostarted: %s", result.get("started"))
+        except Exception:  # noqa: BLE001 - a demo stream must never block boot
+            # A failure here costs the dashboard its data, not the engine its
+            # health endpoint. Log it and serve; /api/stream/start still works.
+            logger.exception("Stream autostart failed; engine is up without a stream")
 
 
 @app.on_event("shutdown")

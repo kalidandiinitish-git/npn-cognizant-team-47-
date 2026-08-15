@@ -7,6 +7,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from src.api import main
 from src.api.main import app
 from src.config import PCA_FEATURES, settings
 from src.streaming.processor import get_processor
@@ -275,3 +276,127 @@ def test_alert_status_update_requires_a_known_alert(client):
     response = client.patch("/api/alerts/TXN-does-not-exist", json={"status": "resolved"})
     assert response.status_code == 404
     assert client.patch("/api/alerts/TXN-1", json={"status": "bogus"}).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# CORS
+#
+# Vercel mints a new hostname for every project and every preview deployment
+# (fraudstream-ai.vercel.app, fraudstream-ai-iota.vercel.app,
+# npn-cognizant-team-47-seven.vercel.app, ...). An allow-list of exact origins
+# therefore goes stale on a redeploy: the engine keeps answering 200, the
+# browser drops the response for want of an Access-Control-Allow-Origin header,
+# and services/api.js quietly serves fabricated transactions in its place. That
+# failure is invisible from the server side, so it is pinned down here.
+# ---------------------------------------------------------------------------
+
+DASHBOARD_ORIGINS = [
+    "https://fraudstream-ai.vercel.app",
+    "https://fraudstream-ai-iota.vercel.app",
+    "https://npn-cognizant-team-47-seven.vercel.app",
+    "https://fraudstream-ai-git-main-team47.vercel.app",
+    "https://npn-cognizant-team-47-9f3ka2x1-team47.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:4173",
+]
+
+
+@pytest.mark.parametrize("origin", DASHBOARD_ORIGINS)
+def test_dashboard_origins_are_readable_by_the_browser(client, origin):
+    response = client.get("/api/health", headers={"Origin": origin})
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == origin
+
+
+@pytest.mark.parametrize("origin", DASHBOARD_ORIGINS)
+def test_dashboard_origins_survive_preflight(client, origin):
+    response = client.options(
+        "/api/metrics",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == origin
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://evil.example.com",
+        # A look-alike must not pass: matching must be anchored to the whole
+        # host, not merely contained in it.
+        "https://fraudstream-ai.vercel.app.evil.com",
+        "https://not-fraudstream-ai.vercel.app",
+    ],
+)
+def test_unrelated_origins_are_refused(client, origin):
+    response = client.get("/api/health", headers={"Origin": origin})
+    assert "access-control-allow-origin" not in response.headers
+
+
+# ---------------------------------------------------------------------------
+# Stream autostart
+#
+# The dashboard's numbers are counters in this process's memory and the free
+# Render plan stops the instance after ~15 minutes idle, so every wake used to
+# hand a visitor a healthy engine with an idle stream and nothing to show.
+# ---------------------------------------------------------------------------
+
+class _RecordingWriter:
+    enabled = False
+
+    def close(self):  # pragma: no cover - shutdown only touches this when enabled
+        pass
+
+
+class _RecordingProcessor:
+    def __init__(self):
+        self.started_with = None
+        self.is_running = False
+        # on_shutdown drains the processor, so the double has to answer it too.
+        self.writer = _RecordingWriter()
+
+    def start(self, **kwargs):
+        self.started_with = kwargs
+        return {"started": True}
+
+    def stop(self):  # pragma: no cover - only reached if is_running is True
+        self.is_running = False
+
+
+def _boot_with_autostart(monkeypatch, enabled, processor):
+    monkeypatch.setattr(settings, "stream_autostart", enabled)
+    monkeypatch.setattr(main, "get_processor", lambda: processor)
+    with TestClient(main.app) as booted:
+        booted.get("/api/health")
+
+
+def test_boot_starts_the_stream_so_a_woken_instance_serves_data(monkeypatch, model_required):
+    processor = _RecordingProcessor()
+    _boot_with_autostart(monkeypatch, True, processor)
+
+    assert processor.started_with is not None, "a woken engine must restore its own stream"
+    assert processor.started_with["delay_ms"] == settings.stream_delay_ms
+
+
+def test_boot_leaves_the_stream_alone_when_autostart_is_off(monkeypatch, model_required):
+    processor = _RecordingProcessor()
+    _boot_with_autostart(monkeypatch, False, processor)
+
+    assert processor.started_with is None
+
+
+def test_a_failing_autostart_still_leaves_a_serving_engine(monkeypatch, model_required):
+    """Losing the stream must cost the dashboard its data, not the engine its
+    health endpoint — otherwise one bad CSV takes the whole demo down."""
+    class _Exploding(_RecordingProcessor):
+        def start(self, **kwargs):
+            raise RuntimeError("stream source unreadable")
+
+    monkeypatch.setattr(settings, "stream_autostart", True)
+    monkeypatch.setattr(main, "get_processor", lambda: _Exploding())
+    with TestClient(main.app) as booted:
+        assert booted.get("/api/health").status_code == 200

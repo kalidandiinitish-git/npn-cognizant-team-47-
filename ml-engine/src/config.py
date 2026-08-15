@@ -185,6 +185,19 @@ class Settings:
         default_factory=lambda: _env_int("STREAM_MAX_TRANSACTIONS", 50_000)
     )
     persist_batch_size: int = field(default_factory=lambda: _env_int("PERSIST_BATCH_SIZE", 25))
+    #: Whether booting the engine also starts the stream.
+    #:
+    #: Every counter the dashboard reads lives in this process's memory, and the
+    #: free Render plan stops the instance after ~15 minutes without a request.
+    #: Waking it therefore produces a healthy engine with an idle stream and zero
+    #: transactions, so a visitor arriving after a quiet spell sees an empty
+    #: dashboard and reads it as broken. Starting the stream on boot makes the
+    #: instance self-restoring: whatever stopped it, it comes back serving data.
+    #: Off by default so tests and local runs keep control of the stream, and set
+    #: to "true" for the deployed demo in render.yaml.
+    stream_autostart: bool = field(
+        default_factory=lambda: _env_bool("STREAM_AUTOSTART", False)
+    )
 
     api_host: str = field(default_factory=lambda: os.getenv("API_HOST", "0.0.0.0"))
     api_port: int = field(default_factory=lambda: _env_int("API_PORT", 8000))
@@ -203,6 +216,24 @@ class Settings:
             ).split(",")
             if origin.strip()
         ]
+    )
+    #: Origins that cannot be listed one by one, because the platform issues a
+    #: new hostname per deployment. Vercel gives each project and each preview
+    #: its own host — fraudstream-ai.vercel.app, fraudstream-ai-iota.vercel.app,
+    #: npn-cognizant-team-47-seven.vercel.app, plus a -git-<branch>- and a
+    #: -<hash>-<team> host for every push. An exact allow-list matches whichever
+    #: of those was current when it was written and silently stops matching on
+    #: the next deploy, at which point the engine still answers 200 but the
+    #: browser discards the response and the dashboard fabricates its numbers.
+    #: Matching the project's host *shape* is what survives a redeploy.
+    #: Anchored at both ends: `...vercel.app.evil.com` must not match, and
+    #: neither must a host that merely contains the project name.
+    cors_origin_regex: str = field(
+        default_factory=lambda: os.getenv(
+            "CORS_ORIGIN_REGEX",
+            r"^(?:https?://(?:localhost|127\.0\.0\.1)(?::\d+)?"
+            r"|https://(?:fraudstream-ai|npn-cognizant-team-47)[a-z0-9-]*\.vercel\.app)$",
+        )
     )
     require_auth: bool = field(default_factory=lambda: _env_bool("REQUIRE_AUTH", True))
     #: Whether REQUIRE_AUTH was set at all. "Unset" and "true" must be told

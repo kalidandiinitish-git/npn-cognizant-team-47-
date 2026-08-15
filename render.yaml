@@ -47,10 +47,13 @@ services:
       # above are configured and the dashboard signs users in.
       - key: REQUIRE_AUTH
         value: "false"
-      # Exact browser origin of the dashboard, scheme included, no trailing
-      # slash, e.g. https://fraudstream-ai.vercel.app. Unset means the engine
-      # allows localhost only and every call from the deployed dashboard is
-      # blocked by the browser before it is ever sent.
+      # Only needed for a dashboard on a custom domain. The engine already
+      # matches localhost and this project's Vercel hosts by shape (see
+      # config.cors_origin_regex), because Vercel issues a new hostname per
+      # project and per preview — an exact list here goes stale on the next
+      # deploy, and a stale list is invisible: the engine keeps answering 200
+      # while the browser drops every response and the dashboard fabricates.
+      # Scheme included, no trailing slash.
       - key: CORS_ORIGINS
         sync: false
 
@@ -67,6 +70,15 @@ services:
       # --- Runtime behaviour ---
       - key: STREAM_DELAY_MS
         value: "120"
+      # The free plan stops this instance after ~15 minutes without a request
+      # and every dashboard counter lives in its memory, so a wake would
+      # otherwise serve a healthy engine with an idle stream and no data — which
+      # reads as "the demo is broken". Starting the stream on boot makes the
+      # instance restore itself after any stop. The keepalive workflow in
+      # .github/workflows/keepalive.yml is what stops it sleeping in the first
+      # place; this is what makes a sleep survivable.
+      - key: STREAM_AUTOSTART
+        value: "true"
       - key: PERSIST_BATCH_SIZE
         value: "25"
       - key: LOG_LEVEL
