@@ -466,15 +466,19 @@ export default function Investigations() {
     () => investigations.filter((item) => !item.assignee && ['open', 'investigating'].includes(item.status)).length,
     [investigations],
   );
-  const confirmedCount = useMemo(
-    () =>
-      investigations.filter(
-        (item) =>
-          item.resolution_code === 'confirmed_fraud' ||
-          (item.status === 'resolved' && item.resolution_code !== 'false_positive' && item.resolution_code !== 'dismissed'),
-      ).length,
-    [investigations],
-  );
+  // Confirmed fraud is an analyst outcome, so only a recorded resolution of
+  // confirmed_fraud counts. This used to treat any resolved case that was not
+  // explicitly false_positive or dismissed as a confirmation, which counted
+  // three things that are not fraud: a case closed as `legitimate`, one closed
+  // as `insufficient_evidence`, and -- most often -- a case with no resolution
+  // at all, because moving an alert to Resolved from the triage dropdown sets
+  // the case status without recording an outcome. A fraud console must never
+  // claim a confirmation nobody made. The engine already counts this correctly
+  // from the resolution codes themselves (investigations/store.py::metrics).
+  const confirmedCount = useMemo(() => {
+    if (typeof metrics.confirmed_fraud === 'number') return metrics.confirmed_fraud;
+    return investigations.filter((item) => item.resolution_code === 'confirmed_fraud').length;
+  }, [metrics.confirmed_fraud, investigations]);
   const resolvedCount = useMemo(
     () => investigations.filter((item) => item.status === 'resolved').length,
     [investigations],
