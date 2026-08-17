@@ -30,10 +30,12 @@ export default function Login() {
     signIn,
     signUp,
     resetPassword,
+    updatePassword,
     enterDemoMode,
     supabaseConfigured,
     demoModeAvailable,
     isAuthenticated,
+    passwordRecovery,
   } = useAuth();
 
   const [mode, setMode] = useState('signin');
@@ -58,8 +60,13 @@ export default function Login() {
   const redirectTo =
     (location.state && location.state.from && location.state.from.pathname) || '/app';
 
+  // A recovery link signs the visitor in before they have set a new password.
+  // Redirecting on that session would drop them into the console with the old
+  // password still in force and no way back to this form.
+  const activeMode = passwordRecovery ? 'update' : mode;
+
   // Redirect declaratively rather than pushing history during render.
-  if (isAuthenticated) {
+  if (isAuthenticated && !passwordRecovery) {
     return <Redirect to={redirectTo} />;
   }
 
@@ -69,7 +76,10 @@ export default function Login() {
     setNotice(null);
     setBusy(true);
     try {
-      if (mode === 'signup') {
+      if (activeMode === 'update') {
+        await updatePassword(password);
+        history.replace(redirectTo);
+      } else if (activeMode === 'signup') {
         const result = await signUp(email, password, fullName);
         if (result && result.session) {
           history.replace(redirectTo);
@@ -77,7 +87,7 @@ export default function Login() {
           setNotice('Account created. Check your inbox to confirm the address, then sign in.');
           setMode('signin');
         }
-      } else if (mode === 'reset') {
+      } else if (activeMode === 'reset') {
         await resetPassword(email);
         setNotice('Password reset link sent, if that address has an account.');
         setMode('signin');
@@ -125,19 +135,34 @@ export default function Login() {
 
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-10">
           <h1 className="text-[26px] font-semibold tracking-tightest text-ink-900">
-            {mode === 'signup'
-              ? 'Create your analyst account'
-              : mode === 'reset'
-                ? 'Reset your password'
-                : 'Sign in to the console'}
+            {activeMode === 'update'
+              ? 'Choose a new password'
+              : activeMode === 'signup'
+                ? 'Create your analyst account'
+                : activeMode === 'reset'
+                  ? 'Reset your password'
+                  : 'Sign in to the console'}
           </h1>
           <p className="mt-2 text-[14px] text-ink-500">
-            {mode === 'signup'
-              ? 'Accounts are managed by Supabase Auth. A profile row is created automatically.'
-              : mode === 'reset'
-                ? 'We will email a recovery link to the address on your account.'
-                : 'Access the live monitor, fraud alerts and model analytics.'}
+            {activeMode === 'update'
+              ? 'Your recovery link is verified. Set the password you will use from now on.'
+              : activeMode === 'signup'
+                ? 'Accounts are managed by Supabase Auth. A profile row is created automatically.'
+                : activeMode === 'reset'
+                  ? 'We will email a recovery link to the address on your account.'
+                  : 'Access the live monitor, fraud alerts and model analytics.'}
           </p>
+
+          {!supabaseConfigured && !demoModeAvailable ? (
+            <div className="mt-5">
+              <Banner tone="error" title="Authentication is not configured">
+                This build has no Supabase credentials, so no one can sign in. Set
+                <span className="mono"> VITE_SUPABASE_URL</span> and
+                <span className="mono"> VITE_SUPABASE_ANON_KEY</span> on the deployment and
+                rebuild.
+              </Banner>
+            </div>
+          ) : null}
 
           {!supabaseConfigured && demoModeAvailable ? (
             <div className="mt-5 rounded-xl border border-brand-200/80 bg-brand-50/60 p-4">
@@ -176,7 +201,7 @@ export default function Login() {
           ) : null}
 
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-            {mode === 'signup' ? (
+            {activeMode === 'signup' ? (
               <div>
                 <label className="field-label" htmlFor="fullName">
                   Full name
@@ -193,34 +218,36 @@ export default function Login() {
               </div>
             ) : null}
 
-            <div>
-              <label className="field-label" htmlFor="email">
-                Work email
-              </label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400">
-                  <Icon name="mail" className="h-4 w-4" />
-                </span>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="field-input pl-9"
-                  placeholder="analyst@company.com"
-                />
+            {activeMode !== 'update' ? (
+              <div>
+                <label className="field-label" htmlFor="email">
+                  Work email
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400">
+                    <Icon name="mail" className="h-4 w-4" />
+                  </span>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    className="field-input pl-9"
+                    placeholder="analyst@company.com"
+                  />
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            {mode !== 'reset' ? (
+            {activeMode !== 'reset' ? (
               <div>
                 <div className="flex items-center justify-between">
                   <label className="field-label" htmlFor="password">
-                    Password
+                    {activeMode === 'update' ? 'New password' : 'Password'}
                   </label>
-                  {mode === 'signin' ? (
+                  {activeMode === 'signin' ? (
                     <button
                       type="button"
                       className="mb-1.5 text-[12.5px] font-medium text-brand-600 hover:text-brand-700"
@@ -242,7 +269,11 @@ export default function Login() {
                     type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
-                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                    autoComplete={
+                      activeMode === 'signup' || activeMode === 'update'
+                        ? 'new-password'
+                        : 'current-password'
+                    }
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     className="field-input pl-9 pr-10"
@@ -260,9 +291,19 @@ export default function Login() {
               </div>
             ) : null}
 
-            <button type="submit" className="btn-primary w-full" disabled={busy}>
+            <button
+              type="submit"
+              className="btn-primary w-full"
+              disabled={busy || (!supabaseConfigured && !demoModeAvailable)}
+            >
               {busy ? <Spinner className="h-4 w-4" /> : null}
-              {mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}
+              {activeMode === 'update'
+                ? 'Set new password'
+                : activeMode === 'signup'
+                  ? 'Create account'
+                  : activeMode === 'reset'
+                    ? 'Send reset link'
+                    : 'Sign in'}
             </button>
           </form>
 
@@ -277,8 +318,8 @@ export default function Login() {
             </div>
           ) : null}
 
-          <p className="mt-6 text-[13.5px] text-ink-500">
-            {mode === 'signin' ? (
+          <p className={`mt-6 text-[13.5px] text-ink-500 ${activeMode === 'update' ? 'hidden' : ''}`}>
+            {activeMode === 'signin' ? (
               <>
                 Need an account?{' '}
                 <button

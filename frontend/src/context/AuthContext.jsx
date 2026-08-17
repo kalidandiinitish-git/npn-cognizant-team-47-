@@ -9,6 +9,11 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // A recovery link signs the visitor in before they have chosen a new
+  // password. Without this flag the app sees a valid session and redirects
+  // straight into the console, so "Forgot password?" delivered a working link
+  // that could never actually change a password.
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   // ---- Supabase session bootstrap + subscription -------------------------
   useEffect(() => {
@@ -56,7 +61,8 @@ export function AuthProvider({ children }) {
         if (active) setLoading(false);
       });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
       if (nextSession) {
         setSession(nextSession);
       } else if (!restoreDemoSession()) {
@@ -175,6 +181,17 @@ export function AuthProvider({ children }) {
     return true;
   }, []);
 
+  /** Complete a recovery: set the new password on the session the link issued. */
+  const updatePassword = useCallback(async (password) => {
+    if (!supabase) {
+      throw new Error('Password updates need Supabase, which is not configured here.');
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw new Error(error.message);
+    setPasswordRecovery(false);
+    return true;
+  }, []);
+
   const signOut = useCallback(async () => {
     localStorage.removeItem(DEMO_STORAGE_KEY);
     sessionStorage.removeItem(DEMO_STORAGE_KEY);
@@ -187,6 +204,7 @@ export function AuthProvider({ children }) {
     }
     setSession(null);
     setProfile(null);
+    setPasswordRecovery(false);
   }, []);
 
   const value = useMemo(() => {
@@ -206,13 +224,26 @@ export function AuthProvider({ children }) {
       isDemoSession: Boolean(session && session.demo),
       supabaseConfigured: isSupabaseConfigured,
       demoModeAvailable: isDemoMode,
+      passwordRecovery,
       signIn,
       signUp,
       signOut,
       resetPassword,
+      updatePassword,
       enterDemoMode,
     };
-  }, [session, profile, loading, signIn, signUp, signOut, resetPassword, enterDemoMode]);
+  }, [
+    session,
+    profile,
+    loading,
+    passwordRecovery,
+    signIn,
+    signUp,
+    signOut,
+    resetPassword,
+    updatePassword,
+    enterDemoMode,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
