@@ -400,3 +400,121 @@ def test_a_failing_autostart_still_leaves_a_serving_engine(monkeypatch, model_re
     monkeypatch.setattr(main, "get_processor", lambda: _Exploding())
     with TestClient(main.app) as booted:
         assert booted.get("/api/health").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Uploading a dataset that cannot be streamed
+#
+# The whole point of the upload page is "add a file, watch it stream". A CSV in
+# any other schema used to upload with a row count and a green "ready to stream"
+# banner, then stream nothing at all. Both ends of that are pinned here.
+# ---------------------------------------------------------------------------
+
+FOREIGN_CSV = (
+    "date,amount,merchant,card_last4\n"
+    "2026-08-17T10:00:00,120.55,Amazon,4412\n"
+    "2026-08-17T10:01:00,4200.00,Unknown Vendor,4412\n"
+)
+
+
+def ulb_csv(rows: int = 3, labelled: bool = True) -> str:
+    header = ["Time"] + list(PCA_FEATURES) + ["Amount"]
+    if labelled:
+        header.append("Class")
+    lines = [",".join(header)]
+    for index in range(1, rows + 1):
+        values = [str(index * 7)] + ["0.1"] * len(PCA_FEATURES) + [f"{20.0 + index:.2f}"]
+        if labelled:
+            values.append("0")
+        lines.append(",".join(values))
+    return "\n".join(lines) + "\n"
+
+
+def test_upload_rejects_a_csv_the_engine_cannot_score(client):
+    from src.config import UPLOAD_DIR
+
+    response = client.post(
+        "/api/dataset/upload",
+        files={"file": ("bank_export.csv", FOREIGN_CSV, "text/csv")},
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "V1" in detail, "the analyst has to be told which columns are missing"
+    assert not (UPLOAD_DIR / "bank_export.csv").exists(), (
+        "a file that cannot be streamed must not be left in the uploads list, "
+        "where its only button can fail"
+    )
+
+
+def test_upload_accepts_and_describes_a_valid_csv(client):
+    from src.config import UPLOAD_DIR
+
+    target = UPLOAD_DIR / "api_probe_upload.csv"
+    try:
+        response = client.post(
+            "/api/dataset/upload",
+            files={"file": ("api_probe_upload.csv", ulb_csv(rows=4), "text/csv")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["stored"] is True
+        assert body["rows"] == 4
+        assert body["streamable"] is True
+        assert body["has_labels"] is True
+        assert target.exists()
+    finally:
+        target.unlink(missing_ok=True)
+
+
+def test_upload_accepts_an_unlabelled_csv(client):
+    from src.config import UPLOAD_DIR
+
+    target = UPLOAD_DIR / "api_probe_unlabelled.csv"
+    try:
+        response = client.post(
+            "/api/dataset/upload",
+            files={"file": ("api_probe_unlabelled.csv", ulb_csv(rows=2, labelled=False), "text/csv")},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["streamable"] is True
+        assert body["has_labels"] is False
+    finally:
+        target.unlink(missing_ok=True)
+
+
+def test_starting_a_stream_on_an_unscoreable_file_is_a_400(client):
+    """Belt and braces: a file placed in data/uploads by any other route."""
+    from src.config import UPLOAD_DIR, ensure_directories
+
+    ensure_directories()
+    target = UPLOAD_DIR / "api_probe_foreign.csv"
+    target.write_text(FOREIGN_CSV, encoding="utf-8")
+    try:
+        response = client.post(
+            "/api/stream/start", json={"source": "api_probe_foreign.csv"}
+        )
+        assert response.status_code == 400
+        assert "V1" in response.json()["detail"]
+    finally:
+        target.unlink(missing_ok=True)
+
+
+def test_stream_status_names_the_active_source(client, model_required):
+    """The dashboard badges the dataset that is live, so status must name it."""
+    from src.config import UPLOAD_DIR, ensure_directories
+
+    ensure_directories()
+    target = UPLOAD_DIR / "api_probe_active.csv"
+    target.write_text(ulb_csv(rows=5), encoding="utf-8")
+    try:
+        started = client.post(
+            "/api/stream/start",
+            json={"source": "api_probe_active.csv", "delay_ms": 0, "persist": False},
+        )
+        assert started.status_code == 200
+        assert started.json()["source_name"] == "api_probe_active.csv"
+        assert started.json()["source_total_rows"] == 5
+    finally:
+        get_processor().stop()
+        target.unlink(missing_ok=True)

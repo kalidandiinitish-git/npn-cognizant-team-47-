@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import csv
 import inspect
 from pathlib import Path
 
 import pytest
 
+from src.config import PCA_FEATURES
 from src.streaming import generator as generator_module
 from src.streaming.generator import (
     InvalidTransactionError,
     TransactionEvent,
     count_transactions,
+    inspect_source,
     transaction_stream,
     validate_record,
 )
+from tests.conftest import make_row
 
 
 def test_transaction_stream_is_a_generator(sample_csv: Path):
@@ -144,3 +148,110 @@ def test_validate_record_rejects_bad_input():
 def test_missing_source_raises(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         list(transaction_stream(tmp_path / "nope.csv"))
+
+
+# ---------------------------------------------------------------------------
+# Source inspection
+#
+# A CSV that is not in the ULB schema used to upload happily, report a row
+# count, and then stream to zero transactions with no error anywhere: the
+# generator rejected every row, the run finished "completed", and the dashboard
+# simply showed nothing. These tests pin the check that turns that silent no-op
+# into an answer.
+# ---------------------------------------------------------------------------
+
+
+def test_inspect_accepts_a_well_formed_source(sample_csv: Path):
+    inspection = inspect_source(sample_csv)
+    assert inspection.streamable
+    assert inspection.missing_columns == ()
+    assert inspection.has_labels, "Class is present, so the fixture is labelled"
+    assert inspection.valid_rows > 0
+    assert inspection.rejection_reason() is None
+
+
+def test_inspect_rejects_a_foreign_schema(tmp_path: Path):
+    """The exact file shape a demo visitor brings: a bank-export CSV."""
+    path = tmp_path / "bank_export.csv"
+    path.write_text(
+        "date,amount,merchant,card_last4\n"
+        "2026-08-17T10:00:00,120.55,Amazon,4412\n",
+        encoding="utf-8",
+    )
+    inspection = inspect_source(path)
+    assert not inspection.streamable
+    assert "V1" in inspection.missing_columns
+    reason = inspection.rejection_reason()
+    # The message has to name what is wrong, not just that something is.
+    assert "V1" in reason and "bank_export.csv" in reason
+
+
+def test_inspect_reports_a_header_only_file(tmp_path: Path):
+    path = tmp_path / "empty.csv"
+    fieldnames = ["Time"] + list(PCA_FEATURES) + ["Amount"]
+    path.write_text(",".join(fieldnames) + "\n", encoding="utf-8")
+    inspection = inspect_source(path)
+    assert not inspection.streamable
+    assert inspection.missing_columns == (), "the header itself is fine"
+    assert "no data rows" in inspection.rejection_reason()
+
+
+def test_inspect_accepts_an_unlabelled_source(tmp_path: Path):
+    """Class is optional: without it the model still scores, it just cannot be graded."""
+    path = tmp_path / "unlabelled.csv"
+    fieldnames = ["Time"] + list(PCA_FEATURES) + ["Amount"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for index in range(1, 4):
+            row = make_row(index)
+            row.pop("Class")
+            writer.writerow(row)
+    inspection = inspect_source(path)
+    assert inspection.streamable
+    assert not inspection.has_labels
+
+
+def test_inspect_names_the_bad_value_when_columns_are_right(tmp_path: Path):
+    """Right header, unparseable values - the reason must say which."""
+    path = tmp_path / "corrupt.csv"
+    fieldnames = ["Time"] + list(PCA_FEATURES) + ["Amount"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        row = make_row(1)
+        row.pop("Class")
+        row["V7"] = "not-a-number"
+        writer.writerow(row)
+    inspection = inspect_source(path)
+    assert not inspection.streamable
+    assert "V7" in inspection.rejection_reason()
+
+
+def test_inspect_reads_only_the_sample(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Inspection must not become a batch read of a 150 MB upload."""
+    path = tmp_path / "big.csv"
+    fieldnames = ["Time"] + list(PCA_FEATURES) + ["Amount", "Class"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for index in range(1, 501):
+            writer.writerow(make_row(index))
+
+    calls = {"count": 0}
+    original = generator_module.validate_record
+
+    def counting_validate(row):
+        calls["count"] += 1
+        return original(row)
+
+    monkeypatch.setattr(generator_module, "validate_record", counting_validate)
+    inspection = inspect_source(path, sample=25)
+    assert inspection.streamable
+    assert calls["count"] <= 25, "inspection sampled the file instead of reading it all"
+
+
+def test_inspect_missing_file_is_not_streamable(tmp_path: Path):
+    inspection = inspect_source(tmp_path / "nope.csv")
+    assert not inspection.streamable
+    assert "not found" in inspection.rejection_reason().lower()

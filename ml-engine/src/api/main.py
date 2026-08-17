@@ -36,10 +36,11 @@ from ..streaming.generator import (
     STREAM_EPOCH,
     TransactionEvent,
     count_transactions,
+    inspect_source,
     _event_timestamp,
 )
 from ..streaming.index import load_index
-from ..streaming.processor import get_processor
+from ..streaming.processor import UnstreamableSourceError, get_processor
 from .auth import AuthenticatedUser, require_user
 from .schemas import (
     AlertStatusUpdate,
@@ -223,7 +224,9 @@ def stream_start(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)
         ) from error
-    except FileNotFoundError as error:
+    except (FileNotFoundError, UnstreamableSourceError) as error:
+        # The file is missing, or present but not in a schema the model reads.
+        # Both are the caller's problem to fix and both must say which.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
         ) from error
@@ -516,16 +519,32 @@ def model_details(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, 
 _row_count_cache: Dict[str, Any] = {}
 
 
-def _count_stream_rows(stream_path: Path) -> int:
+def _describe_source(stream_path: Path) -> Dict[str, Any]:
+    """Row count plus whether the file can be streamed and graded.
+
+    Both answers come from reading the file, so they share the cache. The
+    dashboard needs the schema verdict as well as the size: an upload that
+    cannot be scored must not be offered with a "Stream this" button.
+    """
     if not stream_path.exists():
-        return 0
+        return {"rows": 0, "streamable": False, "has_labels": False}
     stat = stream_path.stat()
     key = (stat.st_size, stat.st_mtime_ns)
     cached = _row_count_cache.get(str(stream_path))
     if cached is None or cached[0] != key:
-        cached = (key, count_transactions(stream_path))
+        inspection = inspect_source(stream_path)
+        described = {
+            "rows": count_transactions(stream_path),
+            "streamable": inspection.streamable,
+            "has_labels": inspection.has_labels,
+        }
+        cached = (key, described)
         _row_count_cache[str(stream_path)] = cached
     return cached[1]
+
+
+def _count_stream_rows(stream_path: Path) -> int:
+    return _describe_source(stream_path)["rows"]
 
 
 @router.get("/dataset/info", tags=["dataset"])
@@ -555,13 +574,16 @@ def dataset_info(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, A
                 stat = item.stat()
             except OSError:  # removed between glob and stat
                 continue
+            described = _describe_source(item)
             uploads.append(
                 {
                     "name": item.name,
                     "size_bytes": stat.st_size,
                     # Measured, not remembered: without this the dashboard has no
                     # row count for an upload and renders every one as "0 rows".
-                    "rows": _count_stream_rows(item),
+                    "rows": described["rows"],
+                    "streamable": described["streamable"],
+                    "has_labels": described["has_labels"],
                     "modified_at": datetime.fromtimestamp(
                         stat.st_mtime, tz=timezone.utc
                     ).isoformat(),
@@ -630,14 +652,35 @@ async def upload_dataset(
     finally:
         await file.close()
 
+    # A file is only "uploaded" if it can actually be streamed. Storing one the
+    # generator will reject row by row put a dataset in the list whose only
+    # button starts a run that scores nothing and reports no error - the upload
+    # looked like it worked right up until the demo showed an empty dashboard.
+    inspection = inspect_source(destination)
+    if not inspection.streamable:
+        destination.unlink(missing_ok=True)
+        reason = inspection.rejection_reason()
+        logger.warning("Rejected uploaded dataset %s: %s", safe_name, reason)
+        raise HTTPException(status_code=400, detail=reason)
+
     rows = count_transactions(destination)
-    logger.info("Stored uploaded dataset %s (%s rows)", destination, rows)
+    logger.info(
+        "Stored uploaded dataset %s (%s rows, labelled=%s)",
+        destination,
+        rows,
+        inspection.has_labels,
+    )
     return {
         "stored": True,
         "name": safe_name,
         "path": str(destination),
         "size_bytes": written,
         "rows": rows,
+        "streamable": True,
+        # Without a Class column the model still scores every row; what is lost
+        # is the live precision/recall panel, which needs ground truth to
+        # compare against. The dashboard says so rather than showing empty tiles.
+        "has_labels": inspection.has_labels,
         "usage": "Pass this file name as 'source' to POST /api/stream/start.",
     }
 

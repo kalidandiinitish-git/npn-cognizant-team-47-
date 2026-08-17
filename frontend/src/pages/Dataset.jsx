@@ -39,6 +39,15 @@ export default function Dataset() {
   const trainingDataset = (dataset && dataset.training_dataset) || {};
   const streamSource = (dataset && dataset.stream_source) || {};
 
+  // What is actually being replayed right now, reported by the engine with the
+  // stream status and refreshed on every poll. dataset.stream_source is the
+  // file the engine defaults to; reading the live source from it meant an
+  // uploaded dataset could stream for minutes while the page still named
+  // stream_test.csv and never lit its "Streaming" badge.
+  const activeSourceName = streamStatus ? streamStatus.source_name : null;
+  const activeSourceRows = streamStatus ? streamStatus.source_total_rows : null;
+  const streamFailed = Boolean(streamStatus && streamStatus.status === 'error');
+
   const onUpload = async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -76,6 +85,8 @@ export default function Dataset() {
       await startStream({ source: name, delay_ms: 80, limit: 2000, persist: true, reset: true });
       await refreshReference();
     } catch (error) {
+      // The engine refuses a source it cannot score and says which columns are
+      // missing. That message is the whole answer, so it goes on screen intact.
       setUploadError(error.message);
     }
   };
@@ -107,9 +118,15 @@ export default function Dataset() {
           icon="target"
         />
         <StatTile
-          label="Stream source rows"
-          value={streamSource.rows != null ? formatNumber(streamSource.rows) : '--'}
-          hint={streamSource.name || null}
+          label={isRunning ? 'Streaming now' : 'Stream source rows'}
+          value={
+            isRunning && activeSourceRows != null
+              ? formatNumber(activeSourceRows)
+              : streamSource.rows != null
+                ? formatNumber(streamSource.rows)
+                : '--'
+          }
+          hint={(isRunning ? activeSourceName : null) || streamSource.name || null}
           icon="stream"
         />
       </div>
@@ -153,16 +170,32 @@ export default function Dataset() {
 
             <div className="mt-4 rounded-md border border-hairline bg-paper p-3.5">
               <p className="text-[12.5px] leading-relaxed text-ink-600">
-                {streamSource.name && streamSource.name !== 'stream_test.csv' ? (
+                {isRunning && activeSourceName ? (
                   <>
-                    Currently streaming from uploaded dataset <span className="mono font-semibold text-brand-600">{streamSource.name}</span> ({formatNumber(streamSource.rows || 0)} transactions).
+                    Streaming{' '}
+                    <span className="mono font-semibold text-brand-600">{activeSourceName}</span>
+                    {activeSourceRows ? <> ({formatNumber(activeSourceRows)} transactions)</> : null}
+                    {streamStatus && streamStatus.processed != null ? (
+                      <> - {formatNumber(streamStatus.processed)} scored so far.</>
+                    ) : (
+                      '.'
+                    )}
                   </>
                 ) : (
                   <>
-                    The default stream replays <span className="mono">stream_test.csv</span>, the held-out test split. You can also upload custom CSV datasets below and replay them directly.
+                    The default stream replays <span className="mono">stream_test.csv</span>, the
+                    held-out test split. Upload a CSV in the same schema below and replay that
+                    instead.
                   </>
                 )}
               </p>
+              {streamFailed && streamStatus.error ? (
+                <div className="mt-3">
+                  <Banner tone="error" title="The last stream run failed">
+                    {streamStatus.error}
+                  </Banner>
+                </div>
+              ) : null}
             </div>
           </div>
         </Card>
@@ -200,8 +233,16 @@ export default function Dataset() {
 
             {uploadResult ? (
               <div className="mt-3">
-                <Banner tone="success" title={`${uploadResult.name} ready`}>
-                  Parsed {formatNumber(uploadResult.rows)} transactions ({formatBytes(uploadResult.size_bytes)}). Ready to stream live!
+                <Banner tone="success" title={`${uploadResult.name} accepted`}>
+                  The engine read {formatNumber(uploadResult.rows)} transactions (
+                  {formatBytes(uploadResult.size_bytes)}) and can score them.
+                  {uploadResult.has_labels === false ? (
+                    <>
+                      {' '}
+                      No <span className="mono">Class</span> column, so it streams and scores but
+                      cannot be graded - the live precision and recall panel stays empty.
+                    </>
+                  ) : null}
                 </Banner>
               </div>
             ) : null}
@@ -211,13 +252,19 @@ export default function Dataset() {
                 <p className="text-2xs font-semibold uppercase tracking-wider text-ink-400">Uploaded datasets</p>
                 <ul className="mt-2 divide-y divide-hairline border-t border-hairline">
                   {dataset.uploads.map((upload) => {
-                    const isStreamingThis = isRunning && (streamSource.name === upload.name);
+                    // Matched against the engine's live stream status, not the
+                    // configured default source, which never changes and so
+                    // never matched an upload.
+                    const isStreamingThis = isRunning && activeSourceName === upload.name;
+                    const scoreable = upload.streamable !== false;
                     return (
                       <li key={upload.name} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <p className="mono truncate text-ink-900 font-medium">{upload.name}</p>
                           <p className="text-2xs text-ink-500">
                             {formatNumber(upload.rows || 0)} rows • {formatBytes(upload.size_bytes || 0)}
+                            {scoreable && upload.has_labels === false ? ' • unlabelled' : ''}
+                            {scoreable ? '' : ' • wrong schema, cannot be scored'}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -231,7 +278,8 @@ export default function Dataset() {
                             type="button"
                             className={isStreamingThis ? "btn-danger btn-sm" : "btn-primary btn-sm"}
                             onClick={() => isStreamingThis ? stopStream() : streamUploaded(upload.name)}
-                            disabled={busy}
+                            disabled={busy || (!scoreable && !isStreamingThis)}
+                            title={scoreable ? undefined : 'This file is not in a schema the model can read.'}
                           >
                             <Icon name={isStreamingThis ? "stop" : "play"} className="h-3.5 w-3.5" />
                             {isStreamingThis ? 'Stop' : 'Stream this'}

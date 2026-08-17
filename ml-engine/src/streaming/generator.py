@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterator, Mapping, Optional, Tuple
 
-from ..config import PCA_FEATURES, TARGET_COLUMN
+from ..config import PCA_FEATURES, RAW_REQUIRED_COLUMNS, TARGET_COLUMN
 from ..features.identity import derive_identity
 
 logger = logging.getLogger(__name__)
@@ -205,3 +205,115 @@ def count_transactions(source: Path) -> int:
         return 0
     with source.open("r", newline="", encoding="utf-8") as handle:
         return max(sum(1 for _ in handle) - 1, 0)
+
+
+#: How many rows :func:`inspect_source` reads before deciding. Large enough that
+#: a file whose first rows happen to be malformed is still judged on its body,
+#: small enough that inspecting a 150 MB upload stays instant.
+INSPECTION_SAMPLE_ROWS = 200
+
+
+@dataclass(frozen=True)
+class SourceInspection:
+    """What a candidate stream file actually contains.
+
+    The generator skips a record it cannot parse and keeps going, which is right
+    for one bad row in a good file and wrong for a file that is the wrong shape
+    entirely: every row is skipped, the run finishes "completed" with nothing
+    processed, and no layer above ever learns why. This is the check that lets
+    the caller answer that question before a stream is started.
+    """
+
+    path: Path
+    exists: bool
+    columns: Tuple[str, ...]
+    missing_columns: Tuple[str, ...]
+    sampled_rows: int
+    valid_rows: int
+    first_rejection: Optional[str]
+    has_labels: bool
+
+    @property
+    def streamable(self) -> bool:
+        return self.valid_rows > 0
+
+    def rejection_reason(self) -> Optional[str]:
+        """A message that names the actual problem, or None when streamable."""
+        if self.streamable:
+            return None
+        name = self.path.name
+        if not self.exists:
+            return f"Stream source not found: {name}"
+        if self.missing_columns:
+            shown = ", ".join(self.missing_columns[:6])
+            if len(self.missing_columns) > 6:
+                shown += f" and {len(self.missing_columns) - 6} more"
+            return (
+                f"{name} is missing {len(self.missing_columns)} required "
+                f"column(s): {shown}. The engine scores the ULB credit-card "
+                f"schema: Time, V1-V28, Amount, and an optional Class label."
+            )
+        if self.sampled_rows == 0:
+            return f"{name} has the right columns but no data rows."
+        return (
+            f"{name} has the right columns but none of its first "
+            f"{self.sampled_rows} rows could be read: {self.first_rejection}."
+        )
+
+
+def inspect_source(source: Path, sample: int = INSPECTION_SAMPLE_ROWS) -> SourceInspection:
+    """Read the header and up to ``sample`` rows to judge whether it can stream.
+
+    Deliberately bounded: this runs on upload and on every stream start, and
+    reading the whole file would reintroduce exactly the batch behaviour the
+    generator exists to avoid.
+    """
+    source = Path(source)
+    if not source.exists():
+        return SourceInspection(
+            path=source,
+            exists=False,
+            columns=(),
+            missing_columns=tuple(RAW_REQUIRED_COLUMNS),
+            sampled_rows=0,
+            valid_rows=0,
+            first_rejection=None,
+            has_labels=False,
+        )
+
+    with source.open("r", newline="", encoding="utf-8", errors="replace") as handle:
+        reader = csv.DictReader(handle)
+        columns = tuple(reader.fieldnames or ())
+        present = {name.strip() for name in columns}
+        missing = tuple(
+            name for name in RAW_REQUIRED_COLUMNS if name not in present
+        )
+
+        sampled = 0
+        valid = 0
+        first_rejection: Optional[str] = None
+        # A file missing required columns cannot produce a single valid row, so
+        # there is nothing to learn from reading it.
+        if not missing:
+            for row in reader:
+                if sampled >= sample:
+                    break
+                sampled += 1
+                try:
+                    validate_record(row)
+                except InvalidTransactionError as error:
+                    if first_rejection is None:
+                        first_rejection = str(error)
+                    continue
+                valid += 1
+
+    return SourceInspection(
+        path=source,
+        exists=True,
+        columns=columns,
+        missing_columns=missing,
+        sampled_rows=sampled,
+        valid_rows=valid,
+        first_rejection=first_rejection,
+        has_labels=TARGET_COLUMN in present,
+    )

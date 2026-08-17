@@ -25,10 +25,25 @@ from ..risk.scoring import (
     assess,
     behaviour_reason_codes,
 )
-from .generator import TransactionEvent, count_transactions, transaction_stream
+from .generator import (
+    TransactionEvent,
+    count_transactions,
+    inspect_source,
+    transaction_stream,
+)
 from .state import StreamConfig, StreamState, StreamStatus
 
 logger = logging.getLogger(__name__)
+
+
+class UnstreamableSourceError(ValueError):
+    """The requested source exists but cannot produce a single scored row.
+
+    Distinct from :class:`FileNotFoundError`: the file is there, it is simply
+    not in a shape the model can read. Raised before the stream thread starts so
+    the caller gets a reason instead of a run that ends instantly with nothing
+    in it.
+    """
 
 #: Columns of ``public.transactions`` (supabase/migrations/0001_init.sql). Only
 #: these are sent to Supabase; ``id`` and ``created_at`` have defaults but the
@@ -158,6 +173,14 @@ class StreamProcessor:
                 }
 
             resolved = self.resolve_source(source)
+            # Refuse a file the generator would reject row by row. Without this
+            # an out-of-schema CSV starts a run that finishes in under a
+            # millisecond having processed nothing, reports "completed" with no
+            # error, and leaves the dashboard blank with no way to find out why.
+            inspection = inspect_source(resolved)
+            if not inspection.streamable:
+                raise UnstreamableSourceError(inspection.rejection_reason())
+
             # Fail fast with a clear message if the model was never trained.
             self.predictor
 
@@ -185,6 +208,10 @@ class StreamProcessor:
             self._stop_event.clear()
             if self.writer.enabled:
                 self._persist_baseline = (self.writer.succeeded, self.writer.failed)
+            # Counted here rather than on the thread: the dashboard reads the
+            # total in the same breath as it gets "started", and computing it
+            # inside _run left that first read showing the previous run's file.
+            self._source_rows = count_transactions(resolved)
             self.state.begin(config)
             self._thread = threading.Thread(
                 target=self._run, args=(config,), name="pseudo-stream", daemon=True
@@ -222,12 +249,37 @@ class StreamProcessor:
         snapshot = self.state.status_snapshot()
         snapshot["is_running"] = self.is_running
         snapshot["source_total_rows"] = self._source_rows
+        # The bare file name of what is being replayed. The dashboard marks
+        # which uploaded dataset is live from this; deriving it in the browser
+        # would mean parsing a host path with the wrong separator rules.
+        configured_source = snapshot.get("config", {}).get("source")
+        snapshot["source_name"] = Path(configured_source).name if configured_source else None
         return snapshot
 
     # -- the loop ------------------------------------------------------------
 
+    def _empty_run_reason(self, config: StreamConfig) -> str:
+        """Why a run ended having scored nothing.
+
+        Inspection already refused the sources that cannot parse at all, so what
+        reaches here is a range problem or a file whose tail is malformed. Either
+        way "completed, 0 transactions, no error" is indistinguishable from a
+        healthy stream nobody can see, and the demo needs the difference.
+        """
+        name = Path(config.source).name
+        if config.skip and config.skip >= self._source_rows:
+            return (
+                f"skip={config.skip} is past the end of {name}, which has "
+                f"{self._source_rows} rows. Nothing was left to stream."
+            )
+        if self.state.invalid_records:
+            return (
+                f"No transaction in {name} could be scored: all "
+                f"{self.state.invalid_records} rows read were rejected."
+            )
+        return f"{name} produced no transactions to score."
+
     def _run(self, config: StreamConfig) -> None:
-        self._source_rows = count_transactions(Path(config.source))
         logger.info(
             "Pseudo-stream starting: source=%s rows=%s limit=%s delay=%sms",
             config.source,
@@ -251,6 +303,10 @@ class StreamProcessor:
             if self._stop_event.is_set():
                 self.state.finish(StreamStatus.IDLE)
                 logger.info("Pseudo-stream stopped after %s transactions", self.state.processed)
+            elif self.state.processed == 0:
+                reason = self._empty_run_reason(config)
+                self.state.finish(StreamStatus.ERROR, reason)
+                logger.error("Pseudo-stream produced nothing: %s", reason)
             else:
                 self.state.finish(StreamStatus.COMPLETED)
                 logger.info("Pseudo-stream completed: %s transactions", self.state.processed)

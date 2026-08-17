@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
+import pytest
+
+from src.config import PCA_FEATURES
 from src.streaming.generator import transaction_stream
-from src.streaming.processor import TRANSACTION_COLUMNS, StreamProcessor
+from src.streaming.processor import (
+    TRANSACTION_COLUMNS,
+    StreamProcessor,
+    UnstreamableSourceError,
+)
 from src.streaming.state import StreamStatus
+from tests.conftest import make_row
 
 
 def build_processor(stub_predictor, stub_writer) -> StreamProcessor:
@@ -297,3 +306,92 @@ def test_counters_reset_between_runs(sample_csv: Path, stub_predictor, stub_writ
     assert processor.state.processed == 0
     assert processor.state.recent_transactions() == []
     assert processor.accounts.all_profiles() == []
+
+
+# ---------------------------------------------------------------------------
+# Unstreamable sources
+#
+# Uploading a CSV that is not in the ULB schema used to start a "stream" that
+# finished in under a millisecond having processed nothing, with status
+# "completed" and error None. The dashboard showed no transactions and no
+# reason. These pin the behaviour that replaces that silence.
+# ---------------------------------------------------------------------------
+
+
+def write_foreign_csv(path: Path) -> Path:
+    path.write_text(
+        "date,amount,merchant,card_last4\n"
+        "2026-08-17T10:00:00,120.55,Amazon,4412\n"
+        "2026-08-17T10:01:00,4200.00,Unknown Vendor,4412\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_start_refuses_a_source_it_cannot_stream(tmp_path: Path, stub_predictor, stub_writer):
+    processor = build_processor(stub_predictor, stub_writer)
+    foreign = write_foreign_csv(tmp_path / "bank_export.csv")
+
+    with pytest.raises(UnstreamableSourceError) as excinfo:
+        processor.start(source=str(foreign), delay_ms=0, persist=False)
+
+    assert "V1" in str(excinfo.value), "the error has to name the missing columns"
+    assert processor.is_running is False
+    assert processor.state.processed == 0
+
+
+def test_refusing_a_source_leaves_the_previous_run_intact(
+    sample_csv: Path, tmp_path: Path, stub_predictor, stub_writer
+):
+    """A rejected start must not wipe the counters a demo is already showing."""
+    processor = build_processor(stub_predictor, stub_writer)
+    processor.start(source=str(sample_csv), limit=10, delay_ms=0, persist=False)
+    if processor._thread is not None:
+        processor._thread.join(timeout=15)
+    assert processor.state.processed == 10
+
+    foreign = write_foreign_csv(tmp_path / "bank_export.csv")
+    with pytest.raises(UnstreamableSourceError):
+        processor.start(source=str(foreign), reset=True, delay_ms=0, persist=False)
+
+    assert processor.state.processed == 10, "counters survived a rejected start"
+
+
+def test_a_run_that_processes_nothing_finishes_in_error(
+    tmp_path: Path, stub_predictor, stub_writer
+):
+    """Defence in depth: a file that passes inspection but yields nothing.
+
+    skip past the end is the realistic way to reach this, and 'completed, zero
+    processed, no error' is indistinguishable from a working stream nobody can
+    see.
+    """
+    processor = build_processor(stub_predictor, stub_writer)
+    source = tmp_path / "short.csv"
+    fieldnames = ["Time"] + list(PCA_FEATURES) + ["Amount", "Class"]
+    with source.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for index in range(1, 4):
+            writer.writerow(make_row(index))
+
+    processor.start(source=str(source), skip=999, delay_ms=0, persist=False)
+    if processor._thread is not None:
+        processor._thread.join(timeout=15)
+
+    assert processor.state.processed == 0
+    assert processor.state.status is StreamStatus.ERROR
+    assert processor.state.error, "a run that produced nothing must say why"
+    assert "999" in processor.state.error or "skip" in processor.state.error.lower()
+
+
+def test_status_names_the_file_being_streamed(sample_csv: Path, stub_predictor, stub_writer):
+    """The dashboard marks which dataset is live, so status must carry its name."""
+    processor = build_processor(stub_predictor, stub_writer)
+    processor.start(source=str(sample_csv), limit=5, delay_ms=0, persist=False)
+    status = processor.status()
+    assert status["source_name"] == sample_csv.name
+    # Row count is known as soon as start returns, not once the thread gets there.
+    assert status["source_total_rows"] == 40
+    if processor._thread is not None:
+        processor._thread.join(timeout=15)
