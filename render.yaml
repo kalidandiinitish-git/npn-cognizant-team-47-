@@ -9,7 +9,16 @@
 
 services:
   - type: web
-    name: fraudstream-ai-engine
+    # Must stay `fraudstream-ai-engine-0t6q`. This is the service the dashboard
+    # actually calls - the host is hardcoded as PRODUCTION_ENGINE_URL in
+    # frontend/services/api.js because the Vercel project sets no env vars. The
+    # name here was `fraudstream-ai-engine`, which matched nothing in the
+    # workspace, so a blueprint sync on 2026-08-17 created a second free service
+    # under that name: same code, same autostarted stream, burning free-tier
+    # hours, with nothing pointing at it. Renaming this is what stops it coming
+    # back. A blueprint matches an existing service by name; changing this to
+    # anything else creates a new service rather than updating this one.
+    name: fraudstream-ai-engine-0t6q
     runtime: python
     plan: free
     region: singapore
