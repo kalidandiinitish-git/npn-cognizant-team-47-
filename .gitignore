@@ -54,3 +54,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .vercel
+
+# ---------- Local tool scratch ----------
+# Browser-automation traces and the Supabase CLI's link state. Both are written
+# into the working tree by tools run against this repo and neither describes the
+# project, so they must not reach a reviewer's checkout.
+.playwright-mcp/
+supabase/.temp/
