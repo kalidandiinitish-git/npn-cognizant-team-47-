@@ -144,6 +144,14 @@ function toReadableError(error) {
         'a minute to wake; if this persists it is not running.',
     );
   }
+  // The engine verifies the Supabase access token this client attaches. A 401
+  // is therefore a session problem, not an outage, and saying "Engine returned
+  // 401" sends people to check a service that is working perfectly.
+  if (error && error.response && error.response.status === 401) {
+    return new Error(
+      'The detection engine rejected this session. Sign out and sign in again.',
+    );
+  }
   if (error && error.response) {
     return new Error(`Engine returned ${error.response.status}.`);
   }

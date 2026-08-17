@@ -28,9 +28,11 @@ services:
         value: 3.11.9
 
       # --- Supabase. Set these in the dashboard, never in the repo. ---
-      # Optional. Without them the engine keeps every counter in memory and
-      # persists nothing, which is all the public demo needs. Set all three
-      # (and flip REQUIRE_AUTH below) to run this as a real deployment.
+      # REQUIRED, because REQUIRE_AUTH is "true" below. SUPABASE_URL and
+      # SUPABASE_ANON_KEY are what verify a dashboard user's access token; the
+      # service-role key is what persists results. With them missing the engine
+      # 503s every protected route by design (config.auth_misconfigured) rather
+      # than failing open, and /api/health says so.
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -39,20 +41,24 @@ services:
         sync: false
 
       # --- Access ---
-      # This service exists to be opened by anyone with the link, and visitors
-      # arrive with no Supabase session. "true" here means strict: the engine
-      # 503s when the Supabase keys above are absent, and 401s every route for a
-      # visitor holding no token, so the dashboard would show nothing but its
-      # simulated-data fallback. Set this to "true" only once the three keys
-      # above are configured and the dashboard signs users in.
+      # Every route except /api/health requires a Supabase access token. This
+      # was "false", which meant the dashboard's login was decorative: the
+      # browser signed users in against Supabase while the engine accepted any
+      # request that reached it, so anyone with this URL could list uploads,
+      # upload a 250 MB CSV, or restart the stream everyone was watching.
+      #
+      # This flag is only honoured when the Supabase keys above are set. If they
+      # are missing the engine refuses protected routes with 503 instead of
+      # serving them open — the failure is loud, and visible on /api/health.
       - key: REQUIRE_AUTH
-        value: "false"
+        value: "true"
       # Only needed for a dashboard on a custom domain. The engine already
       # matches localhost and this project's Vercel hosts by shape (see
       # config.cors_origin_regex), because Vercel issues a new hostname per
       # project and per preview — an exact list here goes stale on the next
-      # deploy, and a stale list is invisible: the engine keeps answering 200
-      # while the browser drops every response and the dashboard fabricates.
+      # deploy, and a stale list is invisible from here: the engine keeps
+      # answering 200 while the browser drops every response, so the dashboard
+      # reports an unreachable engine and the logs show a healthy one.
       # Scheme included, no trailing slash.
       - key: CORS_ORIGINS
         sync: false
