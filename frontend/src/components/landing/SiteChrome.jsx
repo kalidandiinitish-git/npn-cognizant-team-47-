@@ -145,7 +145,7 @@ export function SiteFooter() {
 
   return (
     <footer className="dark-surface bg-ink-900 text-white">
-      <div className="container-page grid gap-10 py-14 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div className="container-page grid grid-cols-1 gap-10 py-14 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <div>
           <div className="flex items-center gap-2.5">
             <Logo />

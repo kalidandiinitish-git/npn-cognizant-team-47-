@@ -48,7 +48,7 @@ export default function HeroPreview() {
           </span>
         </div>
 
-        <div className="grid gap-0 md:grid-cols-[1.55fr_1fr]">
+        <div className="grid grid-cols-1 gap-0 md:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
           {/* live feed */}
           <div className="border-b border-hairline md:border-b-0 md:border-r">
             <div className="flex items-center justify-between px-4 py-3">

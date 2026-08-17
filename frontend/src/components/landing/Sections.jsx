@@ -154,7 +154,7 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="bg-white py-20">
       <div className="container-page">
-        <div className="grid gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-16">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div>
             <p className="eyebrow">How it works</p>
             <h2 className="mt-3 text-[32px] font-bold leading-tight tracking-tightest sm:text-[38px]">
@@ -265,7 +265,7 @@ export function PerformanceBand() {
           ))}
         </dl>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div className="rounded-lg border border-white/12 p-5">
             <p className="text-[13px] font-semibold text-white/85">Confusion matrix, test split</p>
             <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-white/10 text-center">
@@ -328,7 +328,7 @@ export function PerformanceBand() {
 export function RiskModel() {
   return (
     <section id="risk-model" className="bg-paper py-20">
-      <div className="container-page grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
+      <div className="container-page grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-16">
         <div>
           <p className="eyebrow">Risk model</p>
           <h2 className="mt-3 text-[32px] font-bold leading-tight tracking-tightest sm:text-[38px]">
@@ -405,7 +405,7 @@ export function CtaBand() {
     <section className="bg-white py-20">
       <div className="container-page">
         <div className="overflow-hidden rounded-xl border border-hairline bg-paper">
-          <div className="grid items-center gap-8 p-8 sm:p-12 lg:grid-cols-[1.4fr_1fr]">
+          <div className="grid grid-cols-1 items-center gap-8 p-8 sm:p-12 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div>
               <h2 className="text-[28px] font-bold leading-tight tracking-tightest sm:text-[34px]">
                 Start the stream and watch it work

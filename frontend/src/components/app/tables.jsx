@@ -378,7 +378,7 @@ export function AccountTable({ accounts }) {
               {isOpen && account.signals ? (
                 <tr>
                   <td className="border-b border-hairline bg-paper px-4 py-4" colSpan={8}>
-                    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
                       <div>
                         <p className="eyebrow">Weighted risk signals</p>
                         <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-500">

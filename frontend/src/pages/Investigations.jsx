@@ -243,7 +243,7 @@ function CaseDrawer({ investigation, loading, loadError, onClose, onChange, acti
               </div>
             </Card>
 
-            <div className="grid gap-5 xl:grid-cols-[1.35fr_0.85fr]">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)]">
               <EvidencePanel investigation={investigation} />
 
               <div className="space-y-4">

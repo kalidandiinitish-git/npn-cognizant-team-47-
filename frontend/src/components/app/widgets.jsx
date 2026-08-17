@@ -388,7 +388,7 @@ export function AccountSignalBars({ signals }) {
 export function CandidateComparison({ candidates, selected }) {
   if (!candidates || !candidates.length) return null;
   return (
-    <div className="scroll-thin overflow-x-auto">
+    <div className="scroll-thin relative overflow-x-auto">
       <table className="w-full min-w-[680px]">
         <thead>
           <tr>

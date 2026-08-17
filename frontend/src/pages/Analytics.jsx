@@ -59,7 +59,7 @@ export default function Analytics() {
         <StatTile label="F1" value={formatScore(test.f1_score, 4)} hint={`FPR ${formatScore(test.false_positive_rate, 5)}`} icon="activity" />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Precision-recall curve"
@@ -86,7 +86,7 @@ export default function Analytics() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Candidate comparison"
@@ -119,7 +119,7 @@ export default function Analytics() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader title="Threshold tuning" subtitle="Not left at 0.5" icon="target" />
           <div className="px-5 py-4">

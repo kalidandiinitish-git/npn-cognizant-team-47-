@@ -139,7 +139,7 @@ export default function Dataset() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader title="Active files" subtitle="Resolved by the engine at startup" icon="file" />
           <div className="px-5 py-4">
@@ -325,7 +325,7 @@ export default function Dataset() {
       </div>
 
       {profile ? (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <Card>
             <CardHeader
               title="Transactions by hour"

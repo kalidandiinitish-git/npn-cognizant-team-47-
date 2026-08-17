@@ -205,10 +205,14 @@ export function Banner({ tone = 'info', title, children, action, onDismiss }) {
   );
 }
 
+/**
+ * A filter row of six statuses is wider than a phone, so the pill scrolls
+ * inside itself rather than dragging the whole page sideways with it.
+ */
 export function Tabs({ items, value, onChange, ariaLabel = 'Filter' }) {
   return (
     <div
-      className="inline-flex items-center gap-1 rounded-md border border-hairline bg-white p-1"
+      className="scroll-thin inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-md border border-hairline bg-white p-1"
       role="tablist"
       aria-label={ariaLabel}
     >
@@ -221,7 +225,7 @@ export function Tabs({ items, value, onChange, ariaLabel = 'Filter' }) {
             role="tab"
             aria-selected={active}
             onClick={() => onChange(item.value)}
-            className={`rounded px-2.5 py-1 text-[13px] font-medium transition-colors ${
+            className={`whitespace-nowrap rounded px-2.5 py-1 text-[13px] font-medium transition-colors ${
               active ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-900/[0.05]'
             }`}
           >
@@ -242,9 +246,23 @@ export function Skeleton({ className = 'h-4 w-full' }) {
   return <div className={`animate-pulse rounded bg-ink-900/[0.06] ${className}`} />;
 }
 
+/**
+ * Wide tables scroll inside this box, never by dragging the whole page sideways.
+ *
+ * Two things keep that true, and both are load-bearing:
+ *
+ * - `relative` makes this the containing block for absolutely positioned
+ *   descendants. Without it the `sr-only` labels inside these tables resolve
+ *   against the initial containing block, so they escape the clip and sit at
+ *   the table's *unscrolled* x - a 1px box ~110px past the viewport that the
+ *   document then has to scroll to reach.
+ * - Whatever grid holds this card must size its tracks `minmax(0, ...)`. A bare
+ *   `1fr` is `minmax(auto, 1fr)`, and that `auto` floor is the card's
+ *   min-content - which includes the 720px table below, overflow or not.
+ */
 export function TableShell({ children, className = '' }) {
   return (
-    <div className={`scroll-thin overflow-x-auto ${className}`}>
+    <div className={`scroll-thin relative overflow-x-auto ${className}`}>
       <table className="w-full min-w-[720px]">{children}</table>
     </div>
   );

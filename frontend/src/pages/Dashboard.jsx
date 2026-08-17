@@ -148,7 +148,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Arrival and flag rate"
@@ -169,7 +169,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader title="Prediction latency" subtitle="Rolling window" icon="clock" />
           <LatencyPanel latency={latency} />
@@ -259,7 +259,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             title="Latest scored transactions"
