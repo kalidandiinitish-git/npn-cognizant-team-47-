@@ -285,18 +285,32 @@ def check_dataset_upload(client: httpx.Client, report: "Report") -> None:
     if uploaded.status_code != 200:
         return
 
+    # Uploads are namespaced by uploader, so what streams the file is the
+    # reference the engine returns ("<owner>/<file>.csv"), not its display name.
+    reference = uploaded.json().get("source")
+
     listed = client.get("/api/dataset/info").json().get("uploads", [])
+    stored = next((item for item in listed if item.get("source") == reference), None)
     report.add(
-        "uploaded file appears in dataset info",
-        any(item["name"] == UPLOAD_NAME for item in listed),
+        "uploaded file appears in dataset info, attributed to its uploader",
+        stored is not None and stored["name"] == UPLOAD_NAME and "owner_id" in stored,
+        f"source={reference}",
     )
 
     client.post("/api/stream/stop")
     started = client.post(
         "/api/stream/start",
-        json={"source": UPLOAD_NAME, "limit": 20, "delay_ms": 0, "persist": False, "reset": True},
+        json={"source": reference, "limit": 20, "delay_ms": 0, "persist": False, "reset": True},
     )
-    report.add("uploaded dataset can be streamed", started.status_code == 200)
+    report.add(
+        "uploaded dataset can be streamed",
+        started.status_code == 200,
+        f"status={started.status_code} source={reference}",
+    )
+    report.add(
+        "the live stream names the run's owner and file",
+        started.status_code == 200 and started.json().get("source_ref") == reference,
+    )
 
     deadline = time.time() + 30
     processed = 0

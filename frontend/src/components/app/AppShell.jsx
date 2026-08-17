@@ -67,6 +67,50 @@ function EngineBanner() {
   );
 }
 
+/**
+ * Shown when the live stream was started by a different account.
+ *
+ * This engine runs one stream, in one process, with its counters in memory, so
+ * whoever presses Start replaces what every other signed-in analyst is
+ * watching. That is the intended shape - a fraud team works one queue - but
+ * unannounced it reads as the dashboard rewriting itself, which is exactly how
+ * an uploaded dataset appearing to "show for other users" gets reported as a
+ * bug. Naming the account makes a shared workspace legible instead of spooky.
+ */
+function SharedStreamBanner() {
+  const { streamStatus, isRunning } = useStream();
+  const { user } = useAuth();
+
+  const startedBy = streamStatus ? streamStatus.started_by : null;
+  if (!isRunning || !startedBy) return null;
+  // No id on the run means nobody pressed Start: the engine autostarted it on
+  // boot, which is not somebody else's run and needs no announcement.
+  if (!startedBy.id || !user || startedBy.id === user.id) return null;
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-sky-200 bg-sky-50 px-4 py-2 text-[13px] text-sky-900 sm:px-6"
+      role="status"
+    >
+      <Icon name="users" className="h-4 w-4 shrink-0" />
+      <span>
+        <span className="font-semibold">
+          Streaming {startedBy.email || 'another analyst'}&rsquo;s run
+        </span>{' '}
+        — this console shares one live stream, so these figures are the run they
+        started
+        {streamStatus.source_name ? (
+          <>
+            {' '}
+            on <span className="mono">{streamStatus.source_name}</span>
+          </>
+        ) : null}
+        , not a separate one of your own.
+      </span>
+    </div>
+  );
+}
+
 function RealtimePill() {
   const { realtimeStatus, engineOnline, engineConnecting, lastUpdatedAt, error } = useStream();
 
@@ -261,6 +305,7 @@ export default function AppShell({ children }) {
         </header>
 
         <EngineBanner />
+        <SharedStreamBanner />
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>

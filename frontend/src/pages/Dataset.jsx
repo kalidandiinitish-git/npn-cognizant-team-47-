@@ -7,7 +7,7 @@ import { useStream } from '../context/StreamContext';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import api from '../services/api';
 import { API_ENDPOINTS, MAX_UPLOAD_MB, SUPPORTED_UPLOAD_TYPES } from '../utils/constants';
-import { formatBytes, formatCurrency, formatNumber, formatScore } from '../utils/format';
+import { formatBytes, formatCurrency, formatNumber, formatRelative, formatScore } from '../utils/format';
 
 export default function Dataset() {
   useDocumentTitle('Dataset and stream');
@@ -45,6 +45,11 @@ export default function Dataset() {
   // uploaded dataset could stream for minutes while the page still named
   // stream_test.csv and never lit its "Streaming" badge.
   const activeSourceName = streamStatus ? streamStatus.source_name : null;
+  // Uploads are namespaced by uploader, so the bare file name no longer picks
+  // out one file - two accounts can each own a transactions.csv. The engine
+  // reports the same "<owner>/<file>.csv" reference the listing uses, and the
+  // "Streaming" badge is matched on that.
+  const activeSourceRef = streamStatus ? streamStatus.source_ref : null;
   const activeSourceRows = streamStatus ? streamStatus.source_total_rows : null;
   const streamFailed = Boolean(streamStatus && streamStatus.status === 'error');
 
@@ -76,13 +81,16 @@ export default function Dataset() {
     }
   };
 
-  const streamUploaded = async (name) => {
+  // `source` is the engine's reference for the file ("<owner>/<file>.csv" for an
+  // upload), not its display name. Passing the bare name would be ambiguous the
+  // moment two accounts upload the same file name.
+  const streamUploaded = async (source) => {
     setUploadError(null);
     try {
       if (isRunning) {
         await stopStream();
       }
-      await startStream({ source: name, delay_ms: 80, limit: 2000, persist: true, reset: true });
+      await startStream({ source, delay_ms: 80, limit: 2000, persist: true, reset: true });
       await refreshReference();
     } catch (error) {
       // The engine refuses a source it cannot score and says which columns are
@@ -255,16 +263,25 @@ export default function Dataset() {
                     // Matched against the engine's live stream status, not the
                     // configured default source, which never changes and so
                     // never matched an upload.
-                    const isStreamingThis = isRunning && activeSourceName === upload.name;
+                    const isStreamingThis = isRunning && activeSourceRef === upload.source;
                     const scoreable = upload.streamable !== false;
                     return (
-                      <li key={upload.name} className="flex items-center justify-between gap-3 py-2.5">
+                      <li key={upload.source} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <p className="mono truncate text-ink-900 font-medium">{upload.name}</p>
                           <p className="text-2xs text-ink-500">
                             {formatNumber(upload.rows || 0)} rows • {formatBytes(upload.size_bytes || 0)}
                             {scoreable && upload.has_labels === false ? ' • unlabelled' : ''}
                             {scoreable ? '' : ' • wrong schema, cannot be scored'}
+                          </p>
+                          {/* Everyone sees every upload on this engine, so an
+                              unattributed list makes a colleague's file look
+                              like one of yours that appeared on its own. */}
+                          <p className="text-2xs text-ink-400">
+                            {upload.mine
+                              ? 'Uploaded by you'
+                              : `Uploaded by ${upload.owner_email || 'an earlier session'}`}
+                            {upload.uploaded_at ? ` • ${formatRelative(upload.uploaded_at)}` : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -277,9 +294,13 @@ export default function Dataset() {
                           <button
                             type="button"
                             className={isStreamingThis ? "btn-danger btn-sm" : "btn-primary btn-sm"}
-                            onClick={() => isStreamingThis ? stopStream() : streamUploaded(upload.name)}
+                            onClick={() => isStreamingThis ? stopStream() : streamUploaded(upload.source)}
                             disabled={busy || (!scoreable && !isStreamingThis)}
-                            title={scoreable ? undefined : 'This file is not in a schema the model can read.'}
+                            title={
+                              scoreable
+                                ? 'This engine runs one shared stream: starting it replaces what every signed-in analyst is watching.'
+                                : 'This file is not in a schema the model can read.'
+                            }
                           >
                             <Icon name={isStreamingThis ? "stop" : "play"} className="h-3.5 w-3.5" />
                             {isStreamingThis ? 'Stop' : 'Stream this'}
@@ -293,9 +314,11 @@ export default function Dataset() {
             ) : null}
 
             <p className="mt-4 text-2xs leading-relaxed text-ink-500">
-              Uploads land in <span className="mono">ml-engine/data/uploads</span>. To train on a new
-              file, point <span className="mono">DATA_PATH</span> at it and re-run the training
-              command.
+              Uploads land in <span className="mono">ml-engine/data/uploads</span>, under a folder
+              belonging to your account, so two analysts uploading the same file name no longer
+              overwrite one another. Everyone signed in can see and replay every upload — this
+              engine is one shared workspace with one live stream. To train on a new file, point{' '}
+              <span className="mono">DATA_PATH</span> at it and re-run the training command.
             </p>
           </div>
         </Card>

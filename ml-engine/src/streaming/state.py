@@ -42,6 +42,11 @@ class StreamConfig:
     #: Short identifier for this run, mixed into every transaction id so ids
     #: stay unique across restarts and across source files.
     run_id: str = ""
+    #: Who asked for this run, as ``{"id": ..., "email": ...}``. There is one
+    #: shared stream on this engine, so starting one replaces what every other
+    #: signed-in analyst is watching. None means nobody asked: a boot-time
+    #: autostart, or a run started from a script.
+    started_by: Optional[Dict[str, Optional[str]]] = None
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +56,7 @@ class StreamConfig:
             "skip": self.skip,
             "persist": self.persist,
             "run_id": self.run_id,
+            "started_by": self.started_by,
         }
 
 
@@ -325,6 +331,10 @@ class StreamState:
             return {
                 "status": self.status.value,
                 "config": self.config.as_dict(),
+                # Lifted out of config because the dashboard shows it on every
+                # page: one shared stream means "who started this" is the
+                # difference between your run and someone else's replacing it.
+                "started_by": self.config.started_by,
                 "processed": self.processed,
                 "invalid_records": self.invalid_records,
                 "alerts_raised": self.alerts_raised,

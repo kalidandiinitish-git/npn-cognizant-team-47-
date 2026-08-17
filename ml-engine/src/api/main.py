@@ -41,6 +41,14 @@ from ..streaming.generator import (
 )
 from ..streaming.index import load_index
 from ..streaming.processor import UnstreamableSourceError, get_processor
+from ..uploads import (
+    iter_uploads,
+    owner_directory,
+    read_owner_record,
+    reference_for,
+    remove_upload,
+    write_owner_record,
+)
 from .auth import AuthenticatedUser, require_user
 from .schemas import (
     AlertStatusUpdate,
@@ -211,6 +219,10 @@ def stream_start(
             skip=request.skip,
             persist=request.persist,
             reset=request.reset,
+            # One shared stream: this start replaces whatever every other
+            # signed-in analyst is currently watching, so the run has to say
+            # whose it is.
+            actor={"id": user.id, "email": user.email},
         )
         if not result.get("started"):
             # Returning 200 for "did nothing" makes callers poll a stream they
@@ -567,28 +579,42 @@ def dataset_info(user: AuthenticatedUser = Depends(require_user)) -> Dict[str, A
     stream_path = settings.stream_data_path
     stream_exists = stream_path.exists()
 
+    # Every signed-in account sees every upload: this engine is one shared
+    # workspace, the way a fraud team shares one alert queue. What each entry
+    # now carries is who put it there, so a file appearing in the list is
+    # attributable instead of anonymous.
     uploads: List[Dict[str, Any]] = []
-    if UPLOAD_DIR.exists():
-        for item in sorted(UPLOAD_DIR.glob("*.csv")):
-            try:
-                stat = item.stat()
-            except OSError:  # removed between glob and stat
-                continue
-            described = _describe_source(item)
-            uploads.append(
-                {
-                    "name": item.name,
-                    "size_bytes": stat.st_size,
-                    # Measured, not remembered: without this the dashboard has no
-                    # row count for an upload and renders every one as "0 rows".
-                    "rows": described["rows"],
-                    "streamable": described["streamable"],
-                    "has_labels": described["has_labels"],
-                    "modified_at": datetime.fromtimestamp(
-                        stat.st_mtime, tz=timezone.utc
-                    ).isoformat(),
-                }
-            )
+    for item, reference in iter_uploads(UPLOAD_DIR):
+        try:
+            stat = item.stat()
+        except OSError:  # removed between glob and stat
+            continue
+        described = _describe_source(item)
+        owner = read_owner_record(item)
+        uploads.append(
+            {
+                "name": item.name,
+                # What to pass as `source` to stream it. The bare name is not
+                # enough any more: two accounts may both own a transactions.csv.
+                "source": reference,
+                "owner_id": owner["owner_id"],
+                "owner_email": owner["owner_email"],
+                "mine": bool(owner["owner_id"]) and owner["owner_id"] == user.id,
+                # The sidecar's timestamp when there is one; the file's mtime is
+                # the fallback for uploads that predate attribution.
+                "uploaded_at": owner["uploaded_at"]
+                or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "size_bytes": stat.st_size,
+                # Measured, not remembered: without this the dashboard has no
+                # row count for an upload and renders every one as "0 rows".
+                "rows": described["rows"],
+                "streamable": described["streamable"],
+                "has_labels": described["has_labels"],
+                "modified_at": datetime.fromtimestamp(
+                    stat.st_mtime, tz=timezone.utc
+                ).isoformat(),
+            }
+        )
 
     return {
         "training_dataset": {
@@ -618,8 +644,10 @@ async def upload_dataset(
 ) -> Dict[str, Any]:
     """Upload a historical transaction CSV (PRD FR-001).
 
-    The file is stored under ml-engine/data/uploads. Pass its name as the
-    ``source`` when starting a stream, or point DATA_PATH at it before training.
+    The file is stored under ml-engine/data/uploads in a directory belonging to
+    the uploading account, so two analysts uploading ``transactions.csv`` no
+    longer overwrite one another. Pass the returned ``source`` when starting a
+    stream, or point DATA_PATH at the returned ``path`` before training.
     """
     ensure_directories()
     original = Path(file.filename or "").name
@@ -632,7 +660,9 @@ async def upload_dataset(
             detail="File name may only contain letters, digits, dot, underscore and hyphen.",
         )
 
-    destination = UPLOAD_DIR / safe_name
+    owner_dir = owner_directory(UPLOAD_DIR, user.id)
+    owner_dir.mkdir(parents=True, exist_ok=True)
+    destination = owner_dir / safe_name
     written = 0
     try:
         with destination.open("wb") as handle:
@@ -658,30 +688,37 @@ async def upload_dataset(
     # looked like it worked right up until the demo showed an empty dashboard.
     inspection = inspect_source(destination)
     if not inspection.streamable:
-        destination.unlink(missing_ok=True)
+        remove_upload(destination)
         reason = inspection.rejection_reason()
         logger.warning("Rejected uploaded dataset %s: %s", safe_name, reason)
         raise HTTPException(status_code=400, detail=reason)
 
+    write_owner_record(destination, user.id, user.email)
     rows = count_transactions(destination)
     logger.info(
-        "Stored uploaded dataset %s (%s rows, labelled=%s)",
+        "Stored uploaded dataset %s (%s rows, labelled=%s) for %s",
         destination,
         rows,
         inspection.has_labels,
+        user.email or user.id,
     )
     return {
         "stored": True,
         "name": safe_name,
+        # The reference to stream this file. Bare names stopped being unique
+        # once uploads were namespaced by uploader.
+        "source": reference_for(UPLOAD_DIR, destination),
+        "owner_id": user.id,
+        "owner_email": user.email,
         "path": str(destination),
         "size_bytes": written,
         "rows": rows,
         "streamable": True,
+        "usage": "Pass this file's 'source' to POST /api/stream/start.",
         # Without a Class column the model still scores every row; what is lost
         # is the live precision/recall panel, which needs ground truth to
         # compare against. The dashboard says so rather than showing empty tiles.
         "has_labels": inspection.has_labels,
-        "usage": "Pass this file name as 'source' to POST /api/stream/start.",
     }
 
 

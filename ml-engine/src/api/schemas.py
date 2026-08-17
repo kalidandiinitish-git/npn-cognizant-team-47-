@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import PCA_FEATURES
+
+#: One path segment of a stream source. Deliberately the same character set the
+#: upload endpoint accepts for a file name, so anything the engine can store is
+#: something the engine can be asked to stream.
+SAFE_SOURCE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class PredictRequest(BaseModel):
@@ -52,7 +58,8 @@ class StreamStartRequest(BaseModel):
     source: Optional[str] = Field(
         default=None,
         description=(
-            "File name of a CSV inside ml-engine/data or ml-engine/data/uploads. "
+            "A CSV in ml-engine/data by bare name, or an upload as "
+            "'<owner>/<file>.csv' as reported by GET /api/dataset/info. "
             "Defaults to the held-out test split."
         ),
         max_length=255,
@@ -60,25 +67,48 @@ class StreamStartRequest(BaseModel):
 
     @field_validator("source")
     @classmethod
-    def source_must_be_a_bare_filename(cls, value: Optional[str]) -> Optional[str]:
-        """Reject directory components so a request cannot walk the filesystem.
+    def source_must_stay_inside_the_data_directories(
+        cls, value: Optional[str]
+    ) -> Optional[str]:
+        """Allow at most one owner directory, and nothing that walks upwards.
 
-        Without this, `source` could name any readable CSV on the host and stream
-        its contents into the dashboard. Operators who need a path outside the
-        data directory should set DATA_PATH or STREAM_DATA_PATH instead.
+        Uploads are namespaced by uploader, so a source has to be able to name
+        the owner as well as the file. That is the *only* directory component
+        permitted: without this restriction `source` could name any readable CSV
+        on the host and stream its contents into the dashboard. Operators who
+        need a path outside the data directory should set DATA_PATH or
+        STREAM_DATA_PATH instead.
         """
         if value is None:
             return None
         candidate = value.strip()
         if not candidate:
             return None
-        if candidate != PurePosixPath(candidate.replace("\\", "/")).name:
+        # Normalise separators first: a backslash is a directory separator on the
+        # host this may run on, so validating the raw string would let
+        # "..\\secrets.csv" through as an innocent-looking bare name.
+        normalised = candidate.replace("\\", "/")
+        parts = PurePosixPath(normalised).parts
+        if normalised.startswith("/") or len(parts) > 2:
             raise ValueError(
-                "source must be a bare file name, without directories or '..'."
+                "source must be a file name, optionally prefixed by one owner "
+                "directory, and must not be an absolute path."
             )
-        if not candidate.lower().endswith(".csv"):
+        if any(part in {"..", "."} for part in parts):
+            raise ValueError("source must not contain '..' or '.' segments.")
+        if not SAFE_SOURCE_SEGMENT.match(parts[0]):
+            raise ValueError(
+                "source segments may only contain letters, digits, dot, "
+                "underscore and hyphen."
+            )
+        if len(parts) == 2 and not SAFE_SOURCE_SEGMENT.match(parts[1]):
+            raise ValueError(
+                "source segments may only contain letters, digits, dot, "
+                "underscore and hyphen."
+            )
+        if not normalised.lower().endswith(".csv"):
             raise ValueError("source must be a .csv file.")
-        return candidate
+        return normalised
     limit: Optional[int] = Field(default=None, ge=1, le=1_000_000)
     delay_ms: Optional[int] = Field(
         default=None, ge=0, le=10_000, description="Pause between transactions."

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -430,6 +431,14 @@ def ulb_csv(rows: int = 3, labelled: bool = True) -> str:
     return "\n".join(lines) + "\n"
 
 
+def discard_upload(body: dict) -> None:
+    """Remove a file the upload endpoint stored, wherever it put it."""
+    from src.uploads import remove_upload
+
+    if body.get("path"):
+        remove_upload(Path(body["path"]))
+
+
 def test_upload_rejects_a_csv_the_engine_cannot_score(client):
     from src.config import UPLOAD_DIR
 
@@ -440,16 +449,14 @@ def test_upload_rejects_a_csv_the_engine_cannot_score(client):
     assert response.status_code == 400
     detail = response.json()["detail"]
     assert "V1" in detail, "the analyst has to be told which columns are missing"
-    assert not (UPLOAD_DIR / "bank_export.csv").exists(), (
+    assert not list(UPLOAD_DIR.rglob("bank_export.csv*")), (
         "a file that cannot be streamed must not be left in the uploads list, "
         "where its only button can fail"
     )
 
 
 def test_upload_accepts_and_describes_a_valid_csv(client):
-    from src.config import UPLOAD_DIR
-
-    target = UPLOAD_DIR / "api_probe_upload.csv"
+    body = {}
     try:
         response = client.post(
             "/api/dataset/upload",
@@ -461,15 +468,16 @@ def test_upload_accepts_and_describes_a_valid_csv(client):
         assert body["rows"] == 4
         assert body["streamable"] is True
         assert body["has_labels"] is True
-        assert target.exists()
+        assert Path(body["path"]).exists()
+        # The reference is what the dashboard streams; the bare name stopped
+        # being unique once uploads were namespaced by uploader.
+        assert body["source"].endswith("api_probe_upload.csv")
     finally:
-        target.unlink(missing_ok=True)
+        discard_upload(body)
 
 
 def test_upload_accepts_an_unlabelled_csv(client):
-    from src.config import UPLOAD_DIR
-
-    target = UPLOAD_DIR / "api_probe_unlabelled.csv"
+    body = {}
     try:
         response = client.post(
             "/api/dataset/upload",
@@ -480,7 +488,7 @@ def test_upload_accepts_an_unlabelled_csv(client):
         assert body["streamable"] is True
         assert body["has_labels"] is False
     finally:
-        target.unlink(missing_ok=True)
+        discard_upload(body)
 
 
 def test_starting_a_stream_on_an_unscoreable_file_is_a_400(client):

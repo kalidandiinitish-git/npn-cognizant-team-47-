@@ -16,6 +16,22 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from ..config import DATA_DIR, UPLOAD_DIR, settings
+from ..uploads import reference_for, resolve_within
+
+
+def _upload_reference(path: Path) -> str:
+    """How the uploads listing addresses *path*, or its bare name if it is not
+    an upload at all (the held-out split, or a file named by DATA_PATH).
+
+    Both sides are resolved before comparing: the stored source has been through
+    ``Path.resolve()`` and the uploads root has not, which on macOS is the
+    difference between /private/var/... and /var/... and would leave every
+    upload reporting a bare name the dashboard cannot match.
+    """
+    try:
+        return reference_for(UPLOAD_DIR.resolve(), path.resolve())
+    except (ValueError, OSError):
+        return path.name
 from ..inference.predictor import FraudPredictor, ModelNotTrainedError, get_predictor
 from ..investigations import InvestigationStore
 from ..persistence.supabase_client import SupabaseWriter, get_writer
@@ -117,9 +133,14 @@ class StreamProcessor:
         """Pick the stream source, preferring the held-out test split.
 
         A relative name is looked up in ``data/`` and then ``data/uploads/``, so a
-        file added through the upload endpoint can be streamed by name. Absolute
-        paths are accepted for programmatic use; requests arriving over HTTP are
-        restricted to bare file names by the API schema.
+        file added through the upload endpoint can be streamed by name. Uploads
+        are namespaced by uploader, so that name may carry one owner directory
+        (``<owner>/<file>.csv``). Absolute paths are accepted for programmatic
+        use; requests arriving over HTTP are restricted by the API schema.
+
+        Every relative candidate is checked for containment after resolution.
+        The schema is the first guard, not the only one: a symlink planted inside
+        the data tree would otherwise resolve to anything on the host.
         """
         if source:
             candidate = Path(source)
@@ -129,8 +150,8 @@ class StreamProcessor:
                 raise FileNotFoundError(f"Stream source not found: {candidate}")
 
             for base in (DATA_DIR, UPLOAD_DIR):
-                resolved = base / candidate
-                if resolved.exists():
+                resolved = resolve_within(base, source)
+                if resolved is not None:
                     return resolved
             raise FileNotFoundError(
                 f"Stream source '{source}' was not found in {DATA_DIR.name}/ or "
@@ -162,8 +183,15 @@ class StreamProcessor:
         skip: int = 0,
         persist: bool = True,
         reset: bool = True,
+        actor: Optional[Dict[str, Optional[str]]] = None,
     ) -> Dict[str, Any]:
-        """Start streaming on a background thread."""
+        """Start streaming on a background thread.
+
+        *actor* is the account that asked for the run, recorded so the dashboard
+        can say whose stream is live. There is one stream per engine, so a start
+        replaces what everyone else is watching; leaving that anonymous is what
+        made it look like the dashboard had changed on its own.
+        """
         with self._lock:
             if self.is_running:
                 return {
@@ -195,6 +223,7 @@ class StreamProcessor:
                 skip=max(int(skip), 0),
                 persist=bool(persist),
                 run_id=uuid4().hex[:6].upper(),
+                started_by=dict(actor) if actor else None,
             )
 
             if reset:
@@ -254,6 +283,13 @@ class StreamProcessor:
         # would mean parsing a host path with the wrong separator rules.
         configured_source = snapshot.get("config", {}).get("source")
         snapshot["source_name"] = Path(configured_source).name if configured_source else None
+        # The same file addressed the way the uploads listing addresses it,
+        # "<owner>/<file>.csv". The dashboard badges which upload is live by
+        # matching on this: bare names stopped identifying a file uniquely once
+        # two accounts could each own a transactions.csv.
+        snapshot["source_ref"] = (
+            _upload_reference(Path(configured_source)) if configured_source else None
+        )
         return snapshot
 
     # -- the loop ------------------------------------------------------------
