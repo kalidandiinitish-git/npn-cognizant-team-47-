@@ -27,17 +27,25 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
 
-      # --- Supabase. Set these in the dashboard, never in the repo. ---
-      # REQUIRED, because REQUIRE_AUTH is "true" below. SUPABASE_URL and
-      # SUPABASE_ANON_KEY are what verify a dashboard user's access token; the
-      # service-role key is what persists results. With them missing the engine
-      # 503s every protected route by design (config.auth_misconfigured) rather
-      # than failing open, and /api/health says so.
+      # --- Supabase ---
+      # The project URL and anon key are the pair that verifies a dashboard
+      # user's access token, and both are public by design: the same two values
+      # are compiled into the browser bundle on every Vercel build
+      # (frontend/src/lib/supabaseClient.js) and identify the project, nothing
+      # more. RLS is what protects the data behind them. They are set here
+      # rather than left `sync: false` because a blueprint cannot supply a
+      # sync: false value, and REQUIRE_AUTH below is inert without them - the
+      # engine 503s every protected route until they exist. Same trade-off
+      # already taken for the frontend.
       - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+        value: https://tppwtosqxbmegrsazjpd.supabase.co
       - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwcHd0b3NxeGJtZWdyc2F6anBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2Nzc4MjQsImV4cCI6MjEwMjI1MzgyNH0.0KWF1lMlhnrBhHqinvHQ1_WOpjpadoHXBRDR8qVVWIQ
+      # The service-role key is NOT public and must never join them. It only
+      # enables persistence to Postgres; without it the engine keeps every
+      # counter in memory, which is all the demo needs. Set it in the Render
+      # dashboard if results should be written.
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
 
       # --- Access ---
