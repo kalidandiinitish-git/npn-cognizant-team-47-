@@ -34,6 +34,8 @@ export default function Dashboard() {
     liveQuality,
     health,
     error,
+    engineConnecting,
+    engineUnreachable,
     initialising,
     isRunning,
     setAlertStatus,
@@ -74,7 +76,18 @@ export default function Dashboard() {
         </Link>
       </PageHeader>
 
-      {error ? (
+      {/*
+        The shell banner already narrates reachability, and it distinguishes a
+        cold start from a dead engine. Repeating the raw request error here put
+        both stories on screen at once: a calm blue "connecting, a sleeping
+        instance can take up to a minute" directly above a red "the engine did
+        not answer; if this persists it is not running" -- during the very
+        90-second grace that exists because a waking Render instance is normal.
+        Contradicting itself is how a healthy cold start gets reported as an
+        outage, so this banner now covers only errors the shell is not already
+        explaining.
+      */}
+      {error && !engineConnecting && !engineUnreachable ? (
         <div className="mb-5">
           <Banner tone="error" title="Detection engine problem">
             {error}
