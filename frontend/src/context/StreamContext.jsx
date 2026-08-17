@@ -362,11 +362,12 @@ export function StreamProvider({ children }) {
       realtimeStatus,
       // Reports whether requests are actually reaching the engine. The previous
       // expression reduced to Boolean(health || metrics), and both are always
-      // set because failed requests are answered with locally generated data -
-      // so this could never be false, however dead the backend was.
+      // set because failed requests used to be answered with locally generated
+      // data - so this could never be false, however dead the backend was.
       engineOnline: engineStatus.live === true,
-      // Data on screen was generated in the browser, not produced by the model.
-      simulated: engineStatus.live === false,
+      // The engine could not be reached. Nothing is substituted for it: whatever
+      // is on screen is the last measurement taken, and the banner says so.
+      engineUnreachable: engineStatus.live === false,
       // No request has completed yet: starting up, or waking a sleeping host.
       engineConnecting: engineStatus.live === null,
       engineError: engineStatus.lastError,

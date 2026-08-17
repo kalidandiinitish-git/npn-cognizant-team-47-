@@ -19,15 +19,15 @@ const NAV = [
 /**
  * Shown whenever the dashboard is not talking to the detection engine.
  *
- * Every failed request is answered with locally generated data so the console
- * stays usable, but those numbers never touched the model. Presenting them
- * unlabelled makes a fraud dashboard state things it cannot support, so the
- * substitution is called out until real contact resumes.
+ * Nothing is substituted when a request fails: every figure in this console is
+ * measured by the engine, and a fraud dashboard that invents numbers to stay
+ * pretty is worse than one that admits it lost contact. Whatever is on screen
+ * during an outage is the last real measurement, and this says so.
  */
-function SimulationBanner() {
-  const { simulated, engineConnecting, engineError, lastEngineContactAt } = useStream();
+function EngineBanner() {
+  const { engineUnreachable, engineConnecting, engineError, lastEngineContactAt } = useStream();
 
-  if (!simulated && !engineConnecting) return null;
+  if (!engineUnreachable && !engineConnecting) return null;
 
   if (engineConnecting) {
     return (
@@ -51,9 +51,9 @@ function SimulationBanner() {
     >
       <Icon name="alert" className="h-4 w-4 shrink-0" />
       <span>
-        <span className="font-semibold">Simulated data.</span> The detection engine is
-        unreachable, so these figures are generated in the browser and are not model
-        output.
+        <span className="font-semibold">Detection engine unreachable.</span> Live
+        updates have stopped. Any figures still on screen are the last ones the
+        engine measured, not current readings.
       </span>
       {engineError ? (
         <span className="text-2xs text-amber-800">({engineError})</span>
@@ -260,7 +260,7 @@ export default function AppShell({ children }) {
           <StreamControls />
         </header>
 
-        <SimulationBanner />
+        <EngineBanner />
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
